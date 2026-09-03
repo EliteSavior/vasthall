@@ -1,4 +1,4 @@
 {
   "name": "Vast Hall sideload drop",
-  "install": "npm config set prefix \"$HOME/.npm-global\" && npm install -g markdownlint-cli"
+  "install": "npm install -g --prefix \"$HOME/.npm-global\" markdownlint-cli"
 }
