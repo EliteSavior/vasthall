@@ -13,7 +13,8 @@ Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag
 Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.12-hall/VastHall-v0-foss.apk
 
 ```bash
-adb install -r VastHall-v0-foss.apk
+adb uninstall com.elitesavior.vasthall  # required when replacing v0.11 or older
+adb install VastHall-v0-foss.apk
 ```
 
 This repo is the public sideload drop.
