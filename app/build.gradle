@@ -1,0 +1,43 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.elitesavior.vasthall"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.elitesavior.vasthall"
+        minSdk 28
+        targetSdk 35
+        versionCode 16
+        versionName "0.16.0"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    flavorDimensions += "distribution"
+    productFlavors {
+        foss {
+            dimension "distribution"
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+}
+
+dependencies {
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.robolectric:robolectric:4.16.1"
+}

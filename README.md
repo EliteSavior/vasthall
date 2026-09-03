@@ -3,17 +3,19 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.11-hall`
-- File: `VastHall-v0-foss.apk` (239681 bytes, md5 `019d892edcf3735e2f12f8ac9c2f6b61`)
+- Tag: `v0.16-hall`
+- File: `VastHall-v0-foss.apk` (269007 bytes, md5 `2621ce8ad3f67372a687c594abae88c4`)
+- Source in this repo matches the APK.
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.11-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.11-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.16-hall/VastHall-v0-foss.apk
 
 ```bash
-adb install -r VastHall-v0-foss.apk
+adb uninstall com.elitesavior.vasthall
+adb install VastHall-v0-foss.apk
 ```
 
-This repo is the public sideload drop.
+Signing note: this binary-only drop does not contain the private debug key used through v0.15. Android therefore requires a clean install when replacing v0.15 or older.
