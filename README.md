@@ -3,13 +3,17 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.1-hall`
-- File: `VastHall-v0-foss.apk` (218725 bytes, md5 `5354568ed7ae0f943b159deda1df269f`)
+- Tag: `v0.2-hall`
+- File: `VastHall-v0-foss.apk` (234877 bytes, md5 `f1bd85ef43e5118d7ffe9d865c0d58eb`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.1-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.2-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.1-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.2-hall/VastHall-v0-foss.apk
 
-Source tree lives on Origin (`elite-savior/vulkan-android-core`). This repo is the public sideload drop.
+```bash
+adb install -r VastHall-v0-foss.apk
+```
+
+This repo is the public sideload drop.
