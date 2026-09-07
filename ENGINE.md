@@ -1,6 +1,6 @@
-# Vast Hall engine (Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **the World owns Actors; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -8,6 +8,8 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
+| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console across travel |
+| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook |
 | `World` | `UWorld` | Spawn, destroy, tick, query, stream levels |
 | `Actor` | `AActor` | Gameplay object with a transform |
 | `ActorComponent` | `UActorComponent` | Behavior attached to an actor |
@@ -16,7 +18,7 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Transform` | `FTransform` | Location, rotator (pitch/yaw/roll degrees), scale |
 | `LevelDefinition` | map / streaming-level asset | Named list of actor templates |
 | `Level` | loaded `ULevel` | Actors currently owned by one loaded map |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `findAsset` / `loadAsset` |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `findAsset` / `loadAsset` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
@@ -27,27 +29,56 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 Package: `com.elitesavior.vasthall.engine`.
 
+## Startup flow
+
+Unreal names, in order:
+
+1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
+4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
+
+```java
+import com.elitesavior.vasthall.engine.GameInstance;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+
+GameInstance game = GameInstance.withDemoAssets();
+game.init();
+game.openLevel("Hall");                 // Play start
+GameplayStatics.openLevel(game, "Hall"); // same path; also used by the console
+
+game.world();                           // same World after travel
+game.assets();                          // same AssetRegistry
+game.console();                         // same DeveloperConsole
+game.gameMode();                        // HallGameMode for Hall.json
+```
+
+Play start uses this path instead of `new World(...)` + a loose console.
+
 ## Load / unload a level
 
 Unreal names on `World` and `GameplayStatics`:
 
 ```java
-import com.elitesavior.vasthall.engine.AssetRegistry;
+import com.elitesavior.vasthall.engine.GameInstance;
 import com.elitesavior.vasthall.engine.GameplayStatics;
 import com.elitesavior.vasthall.engine.LevelDefinition;
 import com.elitesavior.vasthall.engine.World;
 
-World world = new World(AssetRegistry.withDemoAssets()); // Hall + mesh/texture/audio stubs
+GameInstance game = GameInstance.withDemoAssets();
+game.init();
+World world = game.world();                              // Hall + mesh/texture/audio stubs
 world.loadLevel("Hall");                                 // or "levels/Hall.json"
 world.unloadLevel("Hall");                               // UnloadStreamLevel — destroys Hall actors only
-world.openLevel("Hall");                                 // OpenLevel: unload streaming levels, then load Hall
+game.openLevel("Hall");                                  // OpenLevel + install GameMode
 
 // Still valid: register a LevelDefinition yourself (indexes the registry)
 world.registerLevel(LevelDefinition.hall());
 
 GameplayStatics.loadLevel(world, "Hall");
 GameplayStatics.unloadLevel(world, "Hall");
-GameplayStatics.openLevel(world, "Hall");
+GameplayStatics.openLevel(game, "Hall");                 // prefers GameInstance so GameMode is installed
+GameplayStatics.openLevel(world, "Hall");                // same, when world.gameInstance() is set
 ```
 
 `openLevel` is **same-world travel**: it does not create a new `World`. Actors you spawned yourself (no `levelName`) stay; every loaded streaming level is unloaded first.
@@ -63,6 +94,7 @@ Each actor spawned from a level has `actor.levelName()` set to that map. Unload 
 ```json
 {
   "name": "Hall",
+  "gameMode": "HallGameMode",
   "actors": [
     {
       "class": "PlayerPawn",
@@ -80,18 +112,48 @@ Each actor spawned from a level has `actor.levelName()` set to that map. Unload 
 }
 ```
 
-`class` is a short name from `ActorTypes` (`PlayerPawn`, `HallBeaconActor`, …) or a fully qualified `Actor` subclass. Optional fields: `name`, `location` `[x,y,z]`, `rotation` `[pitch,yaw,roll]` degrees, `scale`, `tickEnabled`.
+`class` is a short name from `ActorTypes` (`PlayerPawn`, `HallBeaconActor`, …) or a fully qualified `Actor` subclass. Optional fields: `name`, `location` `[x,y,z]`, `rotation` `[pitch,yaw,roll]` degrees, `scale`, `tickEnabled`. Optional `gameMode` is a short name from `GameModeTypes` (`HallGameMode`, `GameMode`, …) or a fully qualified `GameMode` subclass.
 
 Java equivalent:
 
 ```java
 world.registerLevel(LevelDefinition.named("Hall")
+        .gameMode("HallGameMode")
         .actor(ActorTemplate.of("PlayerPawn").named("PlayerPawn").at(0, 0, 0).tickEnabled(false))
         .actor(ActorTemplate.of("HallBeaconActor").named("HallBeacon")
                 .at(0, 1.5f, 4).tickEnabled(true)));
 ```
 
-Play start calls `AssetRegistry.withDemoAssets()` then `openLevel("Hall")`.
+Play start calls `GameInstance.withDemoAssets()`, `init()`, then `openLevel("Hall")`.
+
+## Write a GameMode
+
+Subclass `GameMode` and register the short name (or use the fully qualified class in JSON):
+
+```java
+public class ArenaGameMode extends GameMode {
+    @Override
+    public Class<? extends Actor> defaultPawnClass() {
+        return PlayerPawn.class;
+    }
+
+    @Override
+    public void initGame(String options) {
+        super.initGame(options);
+    }
+
+    @Override
+    public void startPlay() {
+        super.startPlay(); // spawns defaultPawnClass if the world has none
+    }
+}
+
+GameModeTypes.register("ArenaGameMode", ArenaGameMode.class);
+world.registerLevel(LevelDefinition.named("Arena").gameMode("ArenaGameMode"));
+game.openLevel("Arena");
+```
+
+`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. HUD / PlayerController / GameState are out of scope this version.
 
 ## Register and load an asset
 
@@ -146,7 +208,7 @@ Do world lookups in actor `beginPlay`, not in a constructor — the registry is 
 
 ## Developer console
 
-Unreal mental model: press `` ` `` / `~` and type a command. Java `DeveloperConsole` registers named handlers and `exec`s a line. Play start binds builtins to the live `World`.
+Unreal mental model: press `` ` `` / `~` and type a command. Java `DeveloperConsole` registers named handlers and `exec`s a line. Play start owns the console on `GameInstance`; builtins bind to that live `World`.
 
 ```java
 import com.elitesavior.vasthall.engine.DeveloperConsole;
@@ -170,7 +232,7 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=…` |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -298,14 +360,16 @@ Destroy during `tick` is deferred until that frame finishes, so a ticking actor 
 
 ## What you see in the APK
 
-On play start the activity registers demo assets and `openLevel("Hall")`, which spawns:
+On play start the activity creates a `GameInstance`, `init()`s it, and `openLevel("Hall")`, which installs `HallGameMode` and spawns:
 
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `load Hall`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `load Hall`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
+game.instance=1
+game.mode=HallGameMode pawn=PlayerPawn started=1
 world.actors=2
 world.frame=…
 world.levels=1
@@ -329,6 +393,7 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 - Networking
 - Native mesh spawn through JNI
 - Input / stick lockup changes
-- Seamless travel / a second `World` instance
+- Seamless travel / a second `World` instance / multiplayer
+- A full Unreal Editor GameMode UI / PlayerController / GameState
 - Component replication / Blueprint components
 - A `TransformComponent` (transform is already on `Actor`)

@@ -18,6 +18,7 @@ public final class LevelDefinition {
     public static final String HALL_RESOURCE = "levels/Hall.json";
 
     private final String name;
+    private String gameModeClassName;
     private final List<ActorTemplate> actors = new ArrayList<>();
 
     private LevelDefinition(String name) {
@@ -46,6 +47,20 @@ public final class LevelDefinition {
         } catch (IOException io) {
             throw new IllegalStateException("failed to read level resource: " + path, io);
         }
+    }
+
+    /** Short {@link GameMode} class name selected when this map is opened. */
+    public LevelDefinition gameMode(String className) {
+        if (className == null || className.trim().isEmpty()) {
+            this.gameModeClassName = null;
+            return this;
+        }
+        this.gameModeClassName = className.trim();
+        return this;
+    }
+
+    public String gameModeClassName() {
+        return gameModeClassName;
     }
 
     public LevelDefinition actor(ActorTemplate template) {

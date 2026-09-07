@@ -144,6 +144,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("levels=1"));
         assertTrue(out.contains("assets=4"));
         assertTrue(out.contains("frame=0"));
+        assertTrue(out.contains("mode=-"));
     }
 
     @Test

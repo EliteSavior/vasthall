@@ -12,6 +12,7 @@ import java.util.Map;
  * <pre>
  * {
  *   "name": "Hall",
+ *   "gameMode": "HallGameMode",
  *   "actors": [
  *     {
  *       "class": "HallBeaconActor",
@@ -40,6 +41,9 @@ public final class LevelJson {
         JsonObject root = (JsonObject) rootValue;
         String name = root.reqString("name");
         LevelDefinition def = LevelDefinition.named(name);
+        if (root.has("gameMode")) {
+            def.gameMode(root.reqString("gameMode"));
+        }
         if (root.has("actors")) {
             JsonArray actors = root.reqArray("actors");
             for (int i = 0; i < actors.size(); i++) {

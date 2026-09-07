@@ -31,8 +31,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.elitesavior.vasthall.engine.Actor;
-import com.elitesavior.vasthall.engine.AssetRegistry;
 import com.elitesavior.vasthall.engine.DeveloperConsole;
+import com.elitesavior.vasthall.engine.GameInstance;
+import com.elitesavior.vasthall.engine.GameMode;
 import com.elitesavior.vasthall.engine.HallBeaconActor;
 import com.elitesavior.vasthall.engine.Level;
 import com.elitesavior.vasthall.engine.World;
@@ -76,6 +77,7 @@ public final class VastHallActivity extends Activity implements
     private boolean watchdogRunning;
     private HudAxes hudAxes;
     private DebugHub debugHub;
+    private GameInstance game;
     private World world;
     private DeveloperConsole console;
     private TextView engineMark;
@@ -786,9 +788,11 @@ public final class VastHallActivity extends Activity implements
     }
 
     private void beginPlayWorld() {
-        world = new World(AssetRegistry.withDemoAssets());
-        console = DeveloperConsole.withBuiltins(world);
-        world.openLevel("Hall");
+        game = GameInstance.withDemoAssets();
+        game.init();
+        game.openLevel("Hall");
+        world = game.world();
+        console = game.console();
         lastWorldTickNs = 0L;
     }
 
@@ -834,10 +838,13 @@ public final class VastHallActivity extends Activity implements
         for (Actor actor : world.actors()) {
             componentCount += actor.componentCount();
         }
+        GameMode mode = world.gameMode();
+        String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %sactors=%d comps=%d assets=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d  %s",
                 levelBit,
+                modeBit,
                 world.actorCount(),
                 componentCount,
                 world.assets().size(),
@@ -846,7 +853,7 @@ public final class VastHallActivity extends Activity implements
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.22.0";
+        String version = "0.23.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
@@ -989,7 +996,9 @@ public final class VastHallActivity extends Activity implements
         if (hudAxes != null) {
             hudAxes.stop();
         }
-        if (world != null) {
+        if (game != null) {
+            game.shutdown();
+        } else if (world != null) {
             world.destroyAll();
         }
         nativeStop();
