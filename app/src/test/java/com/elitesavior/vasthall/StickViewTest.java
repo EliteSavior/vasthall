@@ -5,10 +5,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import android.view.View;
-import android.widget.LinearLayout;
+import android.widget.FrameLayout;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -91,7 +92,7 @@ public final class StickViewTest {
     }
 
     @Test
-    public void cancelZerosThenMoveReclaimsTheSameFinger() {
+    public void cancelZerosAndLaterMoveDoesNotRevive() {
         StickView zone = zone(true);
         float[] axes = listen(zone);
 
@@ -108,16 +109,15 @@ public final class StickViewTest {
             }
         }
 
-        // Finger still down: MOVE must reclaim instead of staying dead.
+        // Ghost MOVE after lift/cancel must not re-press. A new DOWN starts a gesture.
         zone.onTouchEvent(event(4, MotionEvent.ACTION_MOVE, 300.0f, 100.0f));
-        assertTrue(zone.hasActiveFinger());
-        assertTrue(traceContains("left INPUT_RECLAIM reason=MOVE_WITHOUT_DOWN"));
-        assertTrue(Math.abs(axes[0]) > 0.9f);
-
-        zone.onTouchEvent(event(4, MotionEvent.ACTION_UP, 300.0f, 100.0f));
         assertIdle(zone, axes);
+        assertFalse(traceContains("INPUT_RECLAIM"));
+
         zone.onTouchEvent(event(5, MotionEvent.ACTION_DOWN, 100.0f, 100.0f));
         assertTrue(zone.hasActiveFinger());
+        zone.onTouchEvent(event(5, MotionEvent.ACTION_UP, 100.0f, 100.0f));
+        assertIdle(zone, axes);
     }
 
     @Test
@@ -154,17 +154,17 @@ public final class StickViewTest {
     }
 
     @Test
-    public void missingPointerWithALiveFingerReclaimsInsteadOfStayingDead() {
+    public void missingPointerZerosInsteadOfStealingAnotherFinger() {
         StickView zone = zone(true);
         float[] axes = listen(zone);
         zone.onTouchEvent(event(4, MotionEvent.ACTION_DOWN, 100.0f, 100.0f));
         zone.onTouchEvent(event(4, MotionEvent.ACTION_MOVE, 300.0f, 100.0f));
         zone.onTouchEvent(event(99, MotionEvent.ACTION_MOVE, 300.0f, 100.0f));
-        assertTrue(zone.hasActiveFinger());
-        assertTrue(traceContains("left INPUT_RECLAIM reason=MISSING_POINTER"));
-        assertTrue(Math.abs(axes[0]) > 0.9f);
+        assertIdle(zone, axes);
+        assertTrue(traceContains("left INPUT_ZERO reason=MISSING_POINTER"));
+        assertFalse(traceContains("INPUT_RECLAIM"));
         zone.enforceIdle();
-        assertTrue(zone.hasActiveFinger());
+        assertIdle(zone, axes);
     }
 
     @Test
@@ -173,32 +173,26 @@ public final class StickViewTest {
         StickView right = zone(false);
         float[] moveAxes = listen(left);
         float[] lookAxes = listen(right);
-        SplitStickRow row = new SplitStickRow(RuntimeEnvironment.getApplication());
-        row.addView(left, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.addView(right, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.measure(
-                View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY));
-        row.layout(0, 0, 1000, 500);
+        PlayHud hud = playHud(left, right, null);
 
         assertEquals(500, left.getWidth());
         assertEquals(500, right.getWidth());
         assertEquals(0, left.getLeft());
         assertEquals(500, right.getLeft());
 
-        row.dispatchTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f));
-        row.dispatchTouchEvent(event(7, MotionEvent.ACTION_MOVE, 800.0f, 240.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_MOVE, 800.0f, 240.0f));
         assertTrue(left.hasActiveFinger());
         assertFalse(right.hasActiveFinger());
         assertTrue(Math.abs(moveAxes[0]) > 0.9f);
 
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
                 MotionEvent.ACTION_POINTER_DOWN
                         | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
                 new float[]{800.0f, 850.0f},
                 new float[]{240.0f, 200.0f}));
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
                 MotionEvent.ACTION_MOVE,
                 new float[]{900.0f, 600.0f},
@@ -208,7 +202,7 @@ public final class StickViewTest {
         assertTrue(Math.hypot(moveAxes[0], moveAxes[1]) > 0.9);
         assertTrue(Math.hypot(lookAxes[0], lookAxes[1]) > 0.9);
 
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
                 MotionEvent.ACTION_POINTER_UP,
                 new float[]{900.0f, 600.0f},
@@ -218,7 +212,7 @@ public final class StickViewTest {
         assertEquals(0.0f, moveAxes[0], EPSILON);
         assertEquals(0.0f, moveAxes[1], EPSILON);
 
-        row.dispatchTouchEvent(event(11, MotionEvent.ACTION_UP, 600.0f, 400.0f));
+        hud.dispatchTouchEvent(event(11, MotionEvent.ACTION_UP, 600.0f, 400.0f));
         assertFalse(right.hasActiveFinger());
         assertEquals(0.0f, lookAxes[0], EPSILON);
         assertEquals(0.0f, lookAxes[1], EPSILON);
@@ -289,21 +283,15 @@ public final class StickViewTest {
     }
 
     @Test
-    public void twentySecondDualHoldThroughSplitRowNeverSeesN2() {
+    public void twentySecondDualHoldThroughPlayHudNeverSeesN2() {
         StickView left = zone(true);
         StickView right = zone(false);
         float[] moveAxes = listen(left);
         float[] lookAxes = listen(right);
-        SplitStickRow row = new SplitStickRow(RuntimeEnvironment.getApplication());
-        row.addView(left, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.addView(right, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.measure(
-                View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY));
-        row.layout(0, 0, 1000, 500);
+        PlayHud hud = playHud(left, right, null);
 
-        row.dispatchTouchEvent(timed(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f, 0L));
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(timed(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f, 0L));
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
                 MotionEvent.ACTION_POINTER_DOWN
                         | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
@@ -311,7 +299,7 @@ public final class StickViewTest {
                 new float[]{240.0f, 200.0f},
                 16L));
         for (int ms = 32; ms <= 20_000; ms += 16) {
-            row.dispatchTouchEvent(event(
+            hud.dispatchTouchEvent(event(
                     new int[]{7, 11},
                     MotionEvent.ACTION_MOVE,
                     new float[]{400.0f, 700.0f},
@@ -325,7 +313,7 @@ public final class StickViewTest {
                 assertTrue("n>1 leaked: " + line, line.contains(" count=1 "));
             }
         }
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
                 MotionEvent.ACTION_POINTER_UP,
                 new float[]{400.0f, 700.0f},
@@ -335,7 +323,7 @@ public final class StickViewTest {
         assertTrue(right.hasActiveFinger());
         assertEquals(0.0f, moveAxes[0], EPSILON);
         assertTrue(Math.hypot(lookAxes[0], lookAxes[1]) > 0.5);
-        left.onTouchEvent(event(13, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
+        hud.dispatchTouchEvent(event(13, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
         assertTrue(left.hasActiveFinger());
     }
 
@@ -374,29 +362,31 @@ public final class StickViewTest {
     }
 
     @Test
-    public void splitRowDoesNotBroadcastOneUpToBothZones() {
+    public void playHudOneUpDoesNotZeroTheOtherStickOrReviveOnGhostMove() {
         StickView left = zone(true);
         StickView right = zone(false);
         float[] moveAxes = listen(left);
         float[] lookAxes = listen(right);
-        SplitStickRow row = new SplitStickRow(RuntimeEnvironment.getApplication());
-        row.addView(left, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.addView(right, new LinearLayout.LayoutParams(0, 500, 0.5f));
-        row.measure(
-                View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
-                View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY));
-        row.layout(0, 0, 1000, 500);
+        PlayHud hud = playHud(left, right, null);
 
-        left.onTouchEvent(event(7, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
-        right.onTouchEvent(event(11, MotionEvent.ACTION_DOWN, 80.0f, 220.0f));
-        left.onTouchEvent(event(7, MotionEvent.ACTION_MOVE, 400.0f, 240.0f));
-        right.onTouchEvent(event(11, MotionEvent.ACTION_MOVE, 200.0f, 400.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
+        hud.dispatchTouchEvent(event(
+                new int[]{7, 11},
+                MotionEvent.ACTION_POINTER_DOWN
+                        | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                new float[]{120.0f, 700.0f},
+                new float[]{240.0f, 220.0f}));
+        hud.dispatchTouchEvent(event(
+                new int[]{7, 11},
+                MotionEvent.ACTION_MOVE,
+                new float[]{400.0f, 700.0f},
+                new float[]{240.0f, 400.0f}));
         assertTrue(left.hasActiveFinger());
         assertTrue(right.hasActiveFinger());
 
-        row.dispatchTouchEvent(event(
+        hud.dispatchTouchEvent(event(
                 new int[]{7, 11},
-                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_POINTER_UP,
                 new float[]{400.0f, 700.0f},
                 new float[]{240.0f, 400.0f}));
         assertFalse(left.hasActiveFinger());
@@ -404,8 +394,89 @@ public final class StickViewTest {
         assertEquals(0.0f, moveAxes[0], EPSILON);
         assertTrue(Math.hypot(lookAxes[0], lookAxes[1]) > 0.9);
 
-        left.onTouchEvent(event(13, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_MOVE, 400.0f, 240.0f));
+        assertIdle(left, moveAxes);
+        assertTrue(right.hasActiveFinger());
+
+        hud.dispatchTouchEvent(event(13, MotionEvent.ACTION_DOWN, 120.0f, 240.0f));
         assertTrue(left.hasActiveFinger());
+    }
+
+    @Test
+    public void jumpWhileMovingDoesNotStealLookStick() {
+        StickView left = zone(true);
+        StickView right = zone(false);
+        float[] moveAxes = listen(left);
+        float[] lookAxes = listen(right);
+        View jump = new View(RuntimeEnvironment.getApplication());
+        FrameLayout.LayoutParams jumpLp = new FrameLayout.LayoutParams(80, 80);
+        jumpLp.gravity = Gravity.TOP | Gravity.START;
+        jumpLp.leftMargin = 920;
+        jumpLp.topMargin = 420;
+        jump.setLayoutParams(jumpLp);
+        final boolean[] jumpDown = {false};
+        jump.setOnTouchListener((view, event) -> {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                jumpDown[0] = true;
+            } else if (action == MotionEvent.ACTION_UP
+                    || action == MotionEvent.ACTION_CANCEL) {
+                jumpDown[0] = false;
+            } else if (action == MotionEvent.ACTION_POINTER_UP) {
+                throw new AssertionError("jump must not see a second pointer");
+            }
+            return true;
+        });
+        PlayHud hud = playHud(left, right, jump);
+
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_MOVE, 400.0f, 240.0f));
+        assertTrue(Math.abs(moveAxes[0]) > 0.9f);
+        assertFalse(right.hasActiveFinger());
+
+        hud.dispatchTouchEvent(event(
+                new int[]{7, 11},
+                MotionEvent.ACTION_POINTER_DOWN
+                        | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                new float[]{400.0f, 960.0f},
+                new float[]{240.0f, 460.0f}));
+        assertTrue(jumpDown[0]);
+        assertFalse(right.hasActiveFinger());
+        assertEquals(0.0f, lookAxes[0], EPSILON);
+        assertEquals(PlayInputMachine.Target.JUMP, hud.machine().targetOf(11));
+
+        hud.dispatchTouchEvent(event(
+                new int[]{7, 11},
+                MotionEvent.ACTION_POINTER_UP
+                        | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                new float[]{400.0f, 960.0f},
+                new float[]{240.0f, 460.0f}));
+        assertFalse(jumpDown[0]);
+        assertTrue(left.hasActiveFinger());
+        assertEquals(PlayInputMachine.Target.MOVE, hud.machine().targetOf(7));
+    }
+
+    @Test
+    public void cancelAllReleasesSticksJumpAndKeys() {
+        StickView left = zone(true);
+        StickView right = zone(false);
+        float[] moveAxes = listen(left);
+        float[] lookAxes = listen(right);
+        PlayHud hud = playHud(left, right, null);
+        hud.machine().keyDown(51);
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 240.0f));
+        hud.dispatchTouchEvent(event(7, MotionEvent.ACTION_MOVE, 400.0f, 240.0f));
+        hud.dispatchTouchEvent(event(
+                new int[]{7, 11},
+                MotionEvent.ACTION_POINTER_DOWN
+                        | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                new float[]{400.0f, 800.0f},
+                new float[]{240.0f, 240.0f}));
+        hud.cancelAll("PAUSE");
+        assertIdle(left, moveAxes);
+        assertIdle(right, lookAxes);
+        assertFalse(hud.machine().anyPressed());
+        assertFalse(hud.machine().isKeyDown(51));
     }
 
     @Test
@@ -428,6 +499,20 @@ public final class StickViewTest {
             }
         }
         return false;
+    }
+
+    private static PlayHud playHud(StickView left, StickView right, View jump) {
+        PlayHud hud = new PlayHud(
+                RuntimeEnvironment.getApplication(),
+                new PlayInputMachine(),
+                left,
+                right,
+                jump);
+        hud.measure(
+                View.MeasureSpec.makeMeasureSpec(1000, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(500, View.MeasureSpec.EXACTLY));
+        hud.layout(0, 0, 1000, 500);
+        return hud;
     }
 
     private static StickView zone(boolean left) {

@@ -55,7 +55,8 @@ public final class VastHallActivity extends Activity implements
     private View debugPanel;
     private TextView dbgMark;
     private SurfaceView surface;
-    private LinearLayout zonesRow;
+    private PlayHud playHud;
+    private PlayInputMachine playInput;
     private boolean dual = true;
     private boolean menuOpen;
     private boolean watchdogRunning;
@@ -136,6 +137,26 @@ public final class VastHallActivity extends Activity implements
             }
         });
 
+        playInput = new PlayInputMachine();
+        playInput.setSink(new PlayInputMachine.Sink() {
+            @Override
+            public void onBegin(PlayInputMachine.Target target, int pointerId) {
+            }
+
+            @Override
+            public void onEnd(
+                    PlayInputMachine.Target target, int pointerId, String reason) {
+                if (target == PlayInputMachine.Target.LEGACY) {
+                    nativeTouch(MotionEvent.ACTION_CANCEL, pointerId, 0.0f, 0.0f);
+                }
+            }
+
+            @Override
+            public void onKey(int keyCode, boolean down) {
+                nativeKey(keyCode, down);
+            }
+        });
+
         FrameLayout root = new FrameLayout(this);
         surface = new SurfaceView(this);
         surface.getHolder().addCallback(this);
@@ -157,12 +178,10 @@ public final class VastHallActivity extends Activity implements
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
-        zonesRow = buildZonesRow();
-        root.addView(zonesRow, new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-
         jump = circleButton(getString(R.string.jump));
+        jump.setClickable(false);
+        jump.setFocusable(false);
+        jump.setFocusableInTouchMode(false);
         jump.setOnTouchListener((view, event) -> {
             int action = event.getActionMasked();
             String who = null;
@@ -181,11 +200,6 @@ public final class VastHallActivity extends Activity implements
                     debugHub.setJump(false);
                     hudAxes.setJump(false);
                     break;
-                case MotionEvent.ACTION_POINTER_UP:
-                    who = "POINTER_UP";
-                    debugHub.setJump(false);
-                    hudAxes.setJump(false);
-                    break;
                 default:
                     break;
             }
@@ -201,10 +215,15 @@ public final class VastHallActivity extends Activity implements
         });
         FrameLayout.LayoutParams jumpLp =
                 new FrameLayout.LayoutParams(dp(72), dp(72));
-        jumpLp.gravity = 8388693;
+        jumpLp.gravity = Gravity.BOTTOM | Gravity.END;
         jumpLp.rightMargin = dp(186);
         jumpLp.bottomMargin = dp(48);
-        root.addView(jump, jumpLp);
+        jump.setLayoutParams(jumpLp);
+
+        playHud = buildPlayHud();
+        root.addView(playHud, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         menuButton = buildMenuButton();
         FrameLayout.LayoutParams menuLp =
@@ -269,21 +288,16 @@ public final class VastHallActivity extends Activity implements
         surface.requestFocus();
     }
 
-    private LinearLayout buildZonesRow() {
-        SplitStickRow row = new SplitStickRow(this);
-
+    private PlayHud buildPlayHud() {
         leftZone = new StickView(this, true);
         leftZone.setListener(hudAxes::setMove);
         leftZone.setProbe(this);
-        row.addView(leftZone, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.MATCH_PARENT, 0.5f));
 
         rightZone = new StickView(this, false);
         rightZone.setListener(hudAxes::setLook);
         rightZone.setProbe(this);
-        row.addView(rightZone, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.MATCH_PARENT, 0.5f));
-        return row;
+
+        return new PlayHud(this, playInput, leftZone, rightZone, jump);
     }
 
     @Override
@@ -327,6 +341,11 @@ public final class VastHallActivity extends Activity implements
         StickView.TRACE.add("controls INPUT_ZERO reason=" + reason);
         if (debugHub != null) {
             debugHub.onZero("both", reason, -1, 0.0f, 0.0f);
+        }
+        if (playHud != null) {
+            playHud.cancelAll(reason);
+        } else if (playInput != null) {
+            playInput.releaseAll(reason);
         }
         if (leftZone != null) {
             leftZone.recenter(reason);
@@ -505,8 +524,8 @@ public final class VastHallActivity extends Activity implements
         nativeSetControlScheme(dualOn ? 0 : 1);
         surface.setOnTouchListener(dualOn ? null : this);
         surface.setClickable(false);
-        if (zonesRow != null) {
-            zonesRow.setVisibility(dualOn ? View.VISIBLE : View.GONE);
+        if (playHud != null) {
+            playHud.setPlayVisible(dualOn);
         }
         if (jump != null) {
             jump.setVisibility(dualOn ? View.VISIBLE : View.GONE);
@@ -567,7 +586,7 @@ public final class VastHallActivity extends Activity implements
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.16.0";
+        String version = "0.17.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
@@ -640,6 +659,8 @@ public final class VastHallActivity extends Activity implements
         }
         if (hasFocus) {
             hideSystemUi();
+        } else {
+            zeroAllControls("FOCUS_LOST");
         }
     }
 
@@ -731,14 +752,39 @@ public final class VastHallActivity extends Activity implements
         }
         if (action == MotionEvent.ACTION_MOVE) {
             for (int i = 0; i < event.getPointerCount(); i++) {
-                nativeTouch(MotionEvent.ACTION_MOVE, event.getPointerId(i),
+                int pid = event.getPointerId(i);
+                if (playInput.pointerMove(pid) == PlayInputMachine.Target.NONE) {
+                    continue;
+                }
+                nativeTouch(MotionEvent.ACTION_MOVE, pid,
                         event.getX(i), event.getY(i));
             }
             return true;
         }
         int index = event.getActionIndex();
-        nativeTouch(action, event.getPointerId(index),
-                event.getX(index), event.getY(index));
+        int pid = event.getPointerId(index);
+        if (action == MotionEvent.ACTION_DOWN
+                || action == MotionEvent.ACTION_POINTER_DOWN) {
+            if (!playInput.pointerDown(pid, PlayInputMachine.Target.LEGACY)) {
+                return true;
+            }
+        }
+        nativeTouch(action, pid, event.getX(index), event.getY(index));
+        if (action == MotionEvent.ACTION_CANCEL) {
+            for (int i = 0; i < event.getPointerCount(); i++) {
+                int cancelPid = event.getPointerId(i);
+                if (i != index) {
+                    nativeTouch(MotionEvent.ACTION_CANCEL, cancelPid,
+                            event.getX(i), event.getY(i));
+                }
+                playInput.pointerUp(cancelPid, "CANCEL");
+            }
+            return true;
+        }
+        if (action == MotionEvent.ACTION_UP
+                || action == MotionEvent.ACTION_POINTER_UP) {
+            playInput.pointerUp(pid, "UP");
+        }
         return true;
     }
 
@@ -753,6 +799,30 @@ public final class VastHallActivity extends Activity implements
             }
         }
         return false;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            return super.dispatchKeyEvent(event);
+        }
+        return handleGameKey(keyCode, event);
+    }
+
+    private boolean handleGameKey(int keyCode, KeyEvent event) {
+        if (event.getRepeatCount() > 0) {
+            return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            playInput.keyDown(keyCode);
+            return true;
+        }
+        if (event.getAction() == KeyEvent.ACTION_UP) {
+            playInput.keyUp(keyCode);
+            return true;
+        }
+        return true;
     }
 
     @Override
@@ -772,18 +842,7 @@ public final class VastHallActivity extends Activity implements
             closeOverlays();
             return true;
         }
-        if (event.getRepeatCount() > 0) {
-            return true;
-        }
-        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            nativeKey(keyCode, true);
-            return true;
-        }
-        if (event.getAction() == KeyEvent.ACTION_UP) {
-            nativeKey(keyCode, false);
-            return true;
-        }
-        return false;
+        return handleGameKey(keyCode, event);
     }
 
     @Override
@@ -791,8 +850,7 @@ public final class VastHallActivity extends Activity implements
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return onKey(surface, keyCode, event) || super.onKeyDown(keyCode, event);
         }
-        nativeKey(keyCode, true);
-        return true;
+        return handleGameKey(keyCode, event);
     }
 
     @Override
@@ -800,7 +858,6 @@ public final class VastHallActivity extends Activity implements
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return onKey(surface, keyCode, event) || super.onKeyUp(keyCode, event);
         }
-        nativeKey(keyCode, false);
-        return true;
+        return handleGameKey(keyCode, event);
     }
 }

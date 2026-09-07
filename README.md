@@ -3,15 +3,14 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.16-hall`
-- File: `VastHall-v0-foss.apk` (269007 bytes, md5 `2621ce8ad3f67372a687c594abae88c4`)
-- Source in this repo matches the APK.
+- Source version: `0.17.0` (play input state machine; sticks/jump/keys release on lift, pause, and focus loss)
+- Last published APK: tag `v0.16-hall`, file `VastHall-v0-foss.apk` (269007 bytes, md5 `2621ce8ad3f67372a687c594abae88c4`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall).
+The last uploaded binary is still [v0.16-hall](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall). This branch is the 0.17 source; it needs a signed `assembleFoss` build before a new release asset exists.
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.16-hall/VastHall-v0-foss.apk
+Direct (v0.16): https://github.com/EliteSavior/vasthall/releases/download/v0.16-hall/VastHall-v0-foss.apk
 
 ```bash
 adb uninstall com.elitesavior.vasthall

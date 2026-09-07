@@ -189,18 +189,6 @@ final class StickView extends View {
         setAxes(0.0f, 0.0f);
     }
 
-    private void reclaim(MotionEvent event, int index, String reason) {
-        int pointerId = event.getPointerId(index);
-        trace(zoneName + " INPUT_RECLAIM reason=" + reason
-                + " ptr=" + pointerId
-                + " prev=" + activePointerId
-                + " count=" + event.getPointerCount());
-        activePointerId = pointerId;
-        drawStick = true;
-        disallowIntercept();
-        updateFrom(event.getX(index), event.getY(index));
-    }
-
     private int trackedIndex(MotionEvent event) {
         if (!hasActiveFinger()) {
             return -1;
@@ -237,14 +225,10 @@ final class StickView extends View {
                     int index = trackedIndex(event);
                     if (index >= 0) {
                         updateFrom(event.getX(index), event.getY(index));
-                    } else if (event.getPointerCount() > 0) {
-                        reclaim(event, 0, "MISSING_POINTER");
                     } else {
                         whoZeroed = "MISSING_POINTER";
                         recenter("MISSING_POINTER");
                     }
-                } else if (event.getPointerCount() > 0) {
-                    reclaim(event, 0, "MOVE_WITHOUT_DOWN");
                 } else {
                     enforceIdle();
                 }
@@ -333,16 +317,10 @@ final class StickView extends View {
 }
 
 /**
- * Half-screen stick row. LinearLayout / ViewGroup splitting still delivered
- * the shared MotionEvent (n=2) into LeftZone — that is the 0.15 leak
- * (`POINTER_UP zone=L pid=0 n=2`). This parent never calls
- * super.dispatchTouchEvent for sticks. Each child gets a synthesized
- * one-pointer event only. Not an Activity-wide multiplexer.
+ * Weighted left/right stick row. Pointer routing lives in {@link PlayHud};
+ * this layout does not own pressed state and does not split MotionEvents.
  */
 final class SplitStickRow extends LinearLayout {
-    private int leftPid = StickView.INVALID_POINTER_ID;
-    private int rightPid = StickView.INVALID_POINTER_ID;
-
     SplitStickRow(Context context) {
         super(context);
         setOrientation(HORIZONTAL);
@@ -350,211 +328,5 @@ final class SplitStickRow extends LinearLayout {
         setFocusable(false);
         setMotionEventSplittingEnabled(false);
         setWeightSum(1.0f);
-    }
-
-    @Override
-    public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (getChildCount() < 2) {
-            return super.dispatchTouchEvent(ev);
-        }
-        requestDisallowInterceptTouchEvent(true);
-        int masked = ev.getActionMasked();
-        switch (masked) {
-            case MotionEvent.ACTION_DOWN:
-                requestUnbufferedDispatch(ev);
-                bindNewPointer(ev, ev.getActionIndex());
-                return true;
-            case MotionEvent.ACTION_POINTER_DOWN:
-                bindNewPointer(ev, ev.getActionIndex());
-                return true;
-            case MotionEvent.ACTION_MOVE:
-                for (int i = 0; i < ev.getPointerCount(); i++) {
-                    deliver(ev, i, MotionEvent.ACTION_MOVE);
-                }
-                return true;
-            case MotionEvent.ACTION_POINTER_UP:
-            case MotionEvent.ACTION_UP:
-                int liftIndex = ev.getActionIndex();
-                int liftPid = ev.getPointerId(liftIndex);
-                deliver(ev, liftIndex, MotionEvent.ACTION_UP);
-                unbind(liftPid);
-                return true;
-            case MotionEvent.ACTION_CANCEL:
-                cancelRelevant(ev);
-                return true;
-            default:
-                return true;
-        }
-    }
-
-    private void bindNewPointer(MotionEvent ev, int index) {
-        int pid = ev.getPointerId(index);
-        if (ownerOf(pid) != null) {
-            deliver(ev, index, MotionEvent.ACTION_DOWN);
-            return;
-        }
-        StickView zone = freeZoneAt(ev.getX(index));
-        if (zone == null) {
-            return;
-        }
-        if (zone == leftChild()) {
-            leftPid = pid;
-        } else {
-            rightPid = pid;
-        }
-        deliver(ev, index, MotionEvent.ACTION_DOWN);
-    }
-
-    private void cancelRelevant(MotionEvent ev) {
-        if (ev.getPointerCount() == 0) {
-            cancelZone(leftChild(), leftPid);
-            cancelZone(rightChild(), rightPid);
-            leftPid = StickView.INVALID_POINTER_ID;
-            rightPid = StickView.INVALID_POINTER_ID;
-            return;
-        }
-        for (int i = 0; i < ev.getPointerCount(); i++) {
-            int pid = ev.getPointerId(i);
-            StickView zone = ownerOf(pid);
-            if (zone != null) {
-                deliver(ev, i, MotionEvent.ACTION_CANCEL);
-                unbind(pid);
-            }
-        }
-    }
-
-    private void cancelZone(StickView zone, int pid) {
-        if (zone == null || pid == StickView.INVALID_POINTER_ID) {
-            return;
-        }
-        MotionEvent cancel = MotionEvent.obtain(
-                System.currentTimeMillis(),
-                System.currentTimeMillis(),
-                MotionEvent.ACTION_CANCEL,
-                0.0f,
-                0.0f,
-                0);
-        try {
-            zone.dispatchTouchEvent(cancel);
-        } finally {
-            cancel.recycle();
-        }
-    }
-
-    private void deliver(MotionEvent src, int pointerIndex, int action) {
-        int pid = src.getPointerId(pointerIndex);
-        StickView zone = ownerOf(pid);
-        if (zone == null) {
-            return;
-        }
-        MotionEvent one = singlePointer(src, pointerIndex, action, zone);
-        try {
-            zone.dispatchTouchEvent(one);
-        } finally {
-            one.recycle();
-        }
-    }
-
-    private MotionEvent singlePointer(
-            MotionEvent src, int pointerIndex, int action, StickView zone) {
-        MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[1];
-        MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[1];
-        properties[0] = new MotionEvent.PointerProperties();
-        src.getPointerProperties(pointerIndex, properties[0]);
-        coords[0] = new MotionEvent.PointerCoords();
-        src.getPointerCoords(pointerIndex, coords[0]);
-        coords[0].x = src.getX(pointerIndex) - zone.getLeft() + getScrollX();
-        coords[0].y = src.getY(pointerIndex) - zone.getTop() + getScrollY();
-        return MotionEvent.obtain(
-                src.getDownTime(),
-                src.getEventTime(),
-                action,
-                1,
-                properties,
-                coords,
-                src.getMetaState(),
-                src.getButtonState(),
-                src.getXPrecision(),
-                src.getYPrecision(),
-                src.getDeviceId(),
-                src.getEdgeFlags(),
-                src.getSource(),
-                src.getFlags());
-    }
-
-    private StickView ownerOf(int pid) {
-        if (pid == StickView.INVALID_POINTER_ID) {
-            return null;
-        }
-        if (leftPid == pid) {
-            return leftChild();
-        }
-        if (rightPid == pid) {
-            return rightChild();
-        }
-        StickView left = leftChild();
-        if (left != null && left.pointerId() == pid) {
-            return left;
-        }
-        StickView right = rightChild();
-        if (right != null && right.pointerId() == pid) {
-            return right;
-        }
-        return null;
-    }
-
-    private void unbind(int pid) {
-        if (leftPid == pid) {
-            leftPid = StickView.INVALID_POINTER_ID;
-        }
-        if (rightPid == pid) {
-            rightPid = StickView.INVALID_POINTER_ID;
-        }
-    }
-
-    private StickView freeZoneAt(float x) {
-        StickView hit = hit(x);
-        if (hit == null) {
-            return null;
-        }
-        if (boundPid(hit) != StickView.INVALID_POINTER_ID || hit.hasActiveFinger()) {
-            return null;
-        }
-        return hit;
-    }
-
-    private int boundPid(StickView zone) {
-        if (zone == leftChild()) {
-            return leftPid;
-        }
-        if (zone == rightChild()) {
-            return rightPid;
-        }
-        return StickView.INVALID_POINTER_ID;
-    }
-
-    private StickView hit(float x) {
-        StickView left = leftChild();
-        StickView right = rightChild();
-        if (left != null && x < left.getRight()) {
-            return left;
-        }
-        return right;
-    }
-
-    private StickView leftChild() {
-        if (getChildCount() < 1) {
-            return null;
-        }
-        View child = getChildAt(0);
-        return child instanceof StickView ? (StickView) child : null;
-    }
-
-    private StickView rightChild() {
-        if (getChildCount() < 2) {
-            return null;
-        }
-        View child = getChildAt(1);
-        return child instanceof StickView ? (StickView) child : null;
     }
 }
