@@ -6,6 +6,11 @@ import static org.junit.Assert.assertTrue;
 import android.content.SharedPreferences;
 import android.view.MotionEvent;
 
+import com.elitesavior.vasthall.engine.HallBeaconActor;
+import com.elitesavior.vasthall.engine.PlayerPawn;
+import com.elitesavior.vasthall.engine.Transform;
+import com.elitesavior.vasthall.engine.World;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -123,6 +128,19 @@ public final class DebugHubTest {
         assertTrue(dump.contains("skipped=off"));
         assertTrue(dump.contains("[CONTROLS]"));
         assertTrue(dump.contains("scheme=dual"));
+    }
+
+    @Test
+    public void engineDumpIncludesWorldActors() {
+        World world = new World();
+        world.spawnActor(PlayerPawn.class);
+        world.spawnActor(HallBeaconActor.class, Transform.at(0.0f, 1.5f, 4.0f));
+        String dump = hub.buildDump("0.18.0", "dual", left, right, false, world);
+        assertTrue(dump.contains("[ENGINE]"));
+        assertTrue(dump.contains("world.actors=2"));
+        assertTrue(dump.contains("name=PlayerPawn"));
+        assertTrue(dump.contains("name=HallBeacon"));
+        assertTrue(dump.contains("class=HallBeaconActor"));
     }
 
     private static MotionEvent event(int pointerId, int action, float x, float y) {
