@@ -30,8 +30,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.elitesavior.vasthall.engine.HallBeaconActor;
-import com.elitesavior.vasthall.engine.PlayerPawn;
-import com.elitesavior.vasthall.engine.Transform;
+import com.elitesavior.vasthall.engine.Level;
+import com.elitesavior.vasthall.engine.LevelDefinition;
 import com.elitesavior.vasthall.engine.World;
 
 import java.io.File;
@@ -618,8 +618,8 @@ public final class VastHallActivity extends Activity implements
 
     private void beginPlayWorld() {
         world = new World();
-        world.spawnActor(PlayerPawn.class, Transform.identity());
-        world.spawnActor(HallBeaconActor.class, Transform.at(0.0f, HallBeaconActor.BASE_Y, 4.0f));
+        world.registerLevel(LevelDefinition.hall());
+        world.openLevel("Hall");
         lastWorldTickNs = 0L;
     }
 
@@ -654,16 +654,24 @@ public final class VastHallActivity extends Activity implements
                     beacon.transform().location.y,
                     beacon.transform().rotation.yaw);
         }
+        String levelBit = "";
+        List<Level> levels = world.loadedLevels();
+        if (levels.size() == 1) {
+            levelBit = levels.get(0).name() + " ";
+        } else if (levels.size() > 1) {
+            levelBit = levels.size() + "lv ";
+        }
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE actors=%d  %s",
+                "SCENE %sactors=%d  %s",
+                levelBit,
                 world.actorCount(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.18.0";
+        String version = "0.19.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {

@@ -1,0 +1,17 @@
+{
+  "name": "Hall",
+  "actors": [
+    {
+      "class": "PlayerPawn",
+      "name": "PlayerPawn",
+      "location": [0, 0, 0],
+      "tickEnabled": false
+    },
+    {
+      "class": "HallBeaconActor",
+      "name": "HallBeacon",
+      "location": [0, 1.5, 4],
+      "tickEnabled": true
+    }
+  ]
+}
