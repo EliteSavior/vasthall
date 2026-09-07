@@ -249,7 +249,7 @@ GameplayStatics.getEventDispatcher(world);
 | `EventType.ACTOR_SPAWNED` | After `beginPlay` (deferred to end-of-tick if you spawn during `tick`) |
 | `EventType.ACTOR_DESTROYED` | After `endPlay`, before the actor detaches |
 
-Already-loaded `loadLevel` and not-loaded `unloadLevel` do not broadcast. Bind order is preserved. A listener bound during broadcast runs on the **next** broadcast. Unbind during broadcast is safe. Null / already-invalid handles are ignored.
+Already-loaded `loadLevel` and not-loaded `unloadLevel` do not broadcast. Bind order is preserved. A listener bound during broadcast runs on the **next** broadcast. Unbind during broadcast is safe. Null / already-invalid / foreign handles are ignored (the handle stays valid if it was not on that delegate). If you `loadLevel` / `unloadLevel` during `tick`, the level event waits until that frame's pending spawn/destroy flush so `ActorSpawned` / `ActorDestroyed` still precede it. Level templates apply `name` / `tickEnabled` before `ActorSpawned`.
 
 `HallGameMode` binds `ActorSpawned` / `LevelUnloaded` in `startPlay` (so it hears later spawns and streaming unloads, not the opening Hall actors — those fire before the mode exists) and unbinds in `endPlay`. The console binds all four engine hooks at builtin registration and logs `event LevelLoaded Hall`, `event ActorSpawned PlayerPawn`, …
 
