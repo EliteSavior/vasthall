@@ -3,12 +3,12 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Source version: `0.21.0` (Asset registry on Scene/World + Actor + Level + Component; see [ENGINE.md](ENGINE.md))
+- Source version: `0.22.0` (Developer console on Scene/World + Actor + Level + Component + Asset; see [ENGINE.md](ENGINE.md))
 - Last published APK: tag `v0.16-hall`, file `VastHall-v0-foss.apk` (269007 bytes, md5 `2621ce8ad3f67372a687c594abae88c4`)
 
 ## Download
 
-The last uploaded binary is still [v0.16-hall](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall). This branch is the 0.21 source; it needs a signed `assembleFoss` build before a new release asset exists.
+The last uploaded binary is still [v0.16-hall](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall). This branch is the 0.22 source; it needs a signed `assembleFoss` build before a new release asset exists.
 
 Direct (v0.16): https://github.com/EliteSavior/vasthall/releases/download/v0.16-hall/VastHall-v0-foss.apk
 
@@ -29,3 +29,5 @@ adb install app/build/outputs/apk/foss/debug/app-foss-debug.apk
 ```
 
 Play start registers demo assets (`Hall` level + mesh/texture/audio stubs) then `openLevel("Hall")` from `levels/Hall.json`: a `PlayerPawn` (Java handle for the native avatar) and a ticking `HallBeacon` that resolves `/Game/Textures/HallBeacon`. Both carry a `TagComponent`. The top-center `SCENE Hall actors=… comps=… assets=…` line is the Scene/Level/Component/Asset layer; it is not a control change.
+
+fossDebug builds show a `~` button on the play HUD (and Menu → Debug → Console). Type `help`, `actors`, `assets`, `load Hall`, `unload Hall`, or `open Hall`. fossRelease omits the overlay (debug/release source-set gate).

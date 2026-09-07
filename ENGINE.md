@@ -1,4 +1,4 @@
-# Vast Hall engine (Scene / Actor / Level / Component / Asset)
+# Vast Hall engine (Scene / Actor / Level / Component / Asset / Console)
 
 Unreal mental model: **the World owns Actors; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path.
 
@@ -21,6 +21,7 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
 | `MeshHandle` / `TextureHandle` / `AudioHandle` | stub `UObject`s | Named handles (no cook/decode yet) |
+| `DeveloperConsole` | `~` console | Register and run named commands |
 | `PlayerPawn` | default pawn | Java handle for the native player avatar (tick off) |
 | `HallBeaconActor` | demo actor | Spawned by the Hall sample; bobs and yaws; resolves a texture in `beginPlay` |
 
@@ -142,6 +143,38 @@ GameplayStatics.loadAsset(world, "Hall");            // throws unknown asset if 
 `World.registerLevel` is a convenience that indexes a `LEVEL` asset as `{name}` / `levels/{name}.json`. `World.loadLevel` and `openLevel` resolve that asset instead of keeping a second hardcoded catalog.
 
 Do world lookups in actor `beginPlay`, not in a constructor — the registry is on the `World`, and `owner().world()` is still null until `spawnActor` finishes. Hall's beacon does this for `/Game/Textures/HallBeacon`.
+
+## Developer console
+
+Unreal mental model: press `` ` `` / `~` and type a command. Java `DeveloperConsole` registers named handlers and `exec`s a line. Play start binds builtins to the live `World`.
+
+```java
+import com.elitesavior.vasthall.engine.DeveloperConsole;
+import com.elitesavior.vasthall.engine.World;
+
+DeveloperConsole console = DeveloperConsole.withBuiltins(world);
+console.exec("help");
+console.exec("actors");
+console.exec("assets");
+console.exec("load Hall");
+console.exec("unload Hall");
+console.exec("open Hall");
+console.register("ping", "Echo ping", (bound, args) -> "pong");
+```
+
+| Command | What it does |
+| --- | --- |
+| `help` / `help <name>` | List commands, or one help line |
+| `actors` (`listactors`) | List live actors (name, class, level, loc) |
+| `assets` (`listassets`) | List the Asset Registry |
+| `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
+| `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
+| `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
+| `stat` | `actors=… levels=… assets=… frame=…` |
+
+Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
+
+**fossDebug only:** a `~` button sits on the play HUD (left of `DBG`). Menu → Debug → Console opens the same overlay. Hardware `` ` `` (`KEYCODE_GRAVE`) toggles it. Opening the console pauses play like Menu so sticks are not involved. **fossRelease** skips the button and overlay (`DeveloperConsoleGate.UI_ENABLED`, debug/release source set); the engine class still compiles.
 
 ## Spawn an actor from code
 
@@ -270,7 +303,7 @@ On play start the activity registers demo assets and `openLevel("Hall")`, which 
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `load Hall`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 world.actors=2
@@ -291,6 +324,7 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 ## Out of scope (this version)
 
 - Unreal Editor / Blueprint / a real Content Browser UI
+- A full in-editor output log / command history browser
 - Packaging / cooking / a packaging-pipeline rewrite
 - Networking
 - Native mesh spawn through JNI

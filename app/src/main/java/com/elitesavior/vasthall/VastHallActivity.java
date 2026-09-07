@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
@@ -31,6 +32,7 @@ import android.widget.Toast;
 
 import com.elitesavior.vasthall.engine.Actor;
 import com.elitesavior.vasthall.engine.AssetRegistry;
+import com.elitesavior.vasthall.engine.DeveloperConsole;
 import com.elitesavior.vasthall.engine.HallBeaconActor;
 import com.elitesavior.vasthall.engine.Level;
 import com.elitesavior.vasthall.engine.World;
@@ -61,6 +63,10 @@ public final class VastHallActivity extends Activity implements
     private StickView rightZone;
     private View settingsPanel;
     private View debugPanel;
+    private View consolePanel;
+    private View consoleButton;
+    private TextView consoleOutput;
+    private EditText consoleInput;
     private TextView dbgMark;
     private SurfaceView surface;
     private PlayHud playHud;
@@ -71,8 +77,10 @@ public final class VastHallActivity extends Activity implements
     private HudAxes hudAxes;
     private DebugHub debugHub;
     private World world;
+    private DeveloperConsole console;
     private TextView engineMark;
     private long lastWorldTickNs;
+    private boolean consoleOpen;
 
     private final Choreographer.FrameCallback watchdog = new Choreographer.FrameCallback() {
         @Override
@@ -265,6 +273,18 @@ public final class VastHallActivity extends Activity implements
         dbgLp.rightMargin = dp(12);
         root.addView(dbgMark, dbgLp);
 
+        final FrameLayout.LayoutParams consoleBtnLp;
+        if (consoleUiEnabled()) {
+            consoleButton = buildConsoleButton();
+            consoleBtnLp = new FrameLayout.LayoutParams(dp(40), dp(40));
+            consoleBtnLp.gravity = Gravity.TOP | Gravity.END;
+            consoleBtnLp.topMargin = dp(10);
+            consoleBtnLp.rightMargin = dp(56);
+            root.addView(consoleButton, consoleBtnLp);
+        } else {
+            consoleBtnLp = null;
+        }
+
         engineMark = new TextView(this);
         engineMark.setTextColor(0xccd4783a);
         engineMark.setTextSize(11.0f);
@@ -293,6 +313,10 @@ public final class VastHallActivity extends Activity implements
             dbgMark.setLayoutParams(dbgLp);
             engineLp.topMargin = dp(8) + top;
             engineMark.setLayoutParams(engineLp);
+            if (consoleButton != null && consoleBtnLp != null) {
+                consoleBtnLp.topMargin = dp(8) + top;
+                consoleButton.setLayoutParams(consoleBtnLp);
+            }
             return insets;
         });
 
@@ -308,6 +332,12 @@ public final class VastHallActivity extends Activity implements
         root.addView(debugPanel, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        if (consoleUiEnabled()) {
+            consolePanel = buildConsolePanel();
+            root.addView(consolePanel, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+        }
 
         setContentView(root);
         nativeInit();
@@ -367,6 +397,97 @@ public final class VastHallActivity extends Activity implements
         Button menu = textButton(getString(R.string.menu), 0xcc1a1c22);
         menu.setOnClickListener(view -> openMenu());
         return menu;
+    }
+
+    static boolean consoleUiEnabled() {
+        return DeveloperConsoleGate.UI_ENABLED;
+    }
+
+    private Button buildConsoleButton() {
+        Button button = textButton(getString(R.string.console_tilde), 0xcc1a1c22);
+        button.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        button.setOnClickListener(view -> toggleConsole());
+        return button;
+    }
+
+    private View buildConsolePanel() {
+        LinearLayout column = overlayColumn();
+        column.setGravity(Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        column.addView(title(getString(R.string.console)));
+
+        consoleOutput = new TextView(this);
+        consoleOutput.setTextColor(0xffe6e6e6);
+        consoleOutput.setTextSize(13.0f);
+        consoleOutput.setTypeface(Typeface.MONOSPACE);
+        consoleOutput.setText("Type help");
+
+        ScrollView outputScroll = new ScrollView(this);
+        outputScroll.setFillViewport(true);
+        outputScroll.setBackgroundColor(0xff111218);
+        outputScroll.setPadding(dp(8), dp(8), dp(8), dp(8));
+        LinearLayout.LayoutParams outputLp =
+                new LinearLayout.LayoutParams(dp(320), dp(140));
+        outputScroll.setLayoutParams(outputLp);
+        outputScroll.addView(consoleOutput);
+        column.addView(outputScroll);
+
+        consoleInput = new EditText(this);
+        consoleInput.setHint(R.string.console_hint);
+        consoleInput.setTextColor(0xffffffff);
+        consoleInput.setHintTextColor(0x88ffffff);
+        consoleInput.setSingleLine(true);
+        consoleInput.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        LinearLayout.LayoutParams inputLp =
+                new LinearLayout.LayoutParams(dp(320), LinearLayout.LayoutParams.WRAP_CONTENT);
+        inputLp.topMargin = dp(10);
+        consoleInput.setLayoutParams(inputLp);
+        consoleInput.setOnEditorActionListener((view, actionId, event) -> {
+            runConsoleLine();
+            return true;
+        });
+        column.addView(consoleInput);
+
+        column.addView(menuAction(getString(R.string.console_run), this::runConsoleLine));
+        column.addView(menuAction(getString(R.string.resume), this::closeOverlays));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setVisibility(View.GONE);
+        scroll.setFillViewport(true);
+        scroll.setClickable(true);
+        scroll.setBackgroundColor(0xe6111216);
+        scroll.addView(column);
+        return scroll;
+    }
+
+    private void runConsoleLine() {
+        if (console == null || consoleInput == null) {
+            return;
+        }
+        String line = consoleInput.getText() == null ? "" : consoleInput.getText().toString();
+        if (line.trim().isEmpty()) {
+            return;
+        }
+        console.exec(line);
+        consoleInput.setText("");
+        refreshConsoleOutput();
+        updateEngineHud();
+    }
+
+    private void refreshConsoleOutput() {
+        if (consoleOutput == null || console == null) {
+            return;
+        }
+        StringBuilder text = new StringBuilder();
+        for (String entry : console.log()) {
+            if (text.length() > 0) {
+                text.append("\n\n");
+            }
+            text.append(entry);
+        }
+        if (text.length() == 0) {
+            text.append("Type help");
+        }
+        consoleOutput.setText(text.toString());
     }
 
     private void zeroAllControls(String reason) {
@@ -468,6 +589,9 @@ public final class VastHallActivity extends Activity implements
         column.addView(debugCheckBound(getString(R.string.debug_input), DebugHub.PREF_INPUT));
         column.addView(debugCheckBound(getString(R.string.debug_engine), DebugHub.PREF_ENGINE));
         column.addView(debugCheckBound(getString(R.string.debug_lifecycle), DebugHub.PREF_LIFECYCLE));
+        if (consoleUiEnabled()) {
+            column.addView(menuAction(getString(R.string.console), this::openConsole));
+        }
         column.addView(menuAction(getString(R.string.back_to_menu), this::openMenu));
 
         ScrollView scroll = new ScrollView(this);
@@ -571,9 +695,11 @@ public final class VastHallActivity extends Activity implements
 
     private void openMenu() {
         menuOpen = true;
+        consoleOpen = false;
         menuPanel.setVisibility(View.VISIBLE);
         settingsPanel.setVisibility(View.GONE);
         debugPanel.setVisibility(View.GONE);
+        hideConsolePanel();
         nativeSetUiPaused(true);
         debugHub.setPaused(true);
         zeroAllControls("OPEN_MENU");
@@ -581,28 +707,70 @@ public final class VastHallActivity extends Activity implements
 
     private void openSettings() {
         menuOpen = true;
+        consoleOpen = false;
         menuPanel.setVisibility(View.GONE);
         settingsPanel.setVisibility(View.VISIBLE);
         debugPanel.setVisibility(View.GONE);
+        hideConsolePanel();
         nativeSetUiPaused(true);
         debugHub.setPaused(true);
     }
 
     private void openDebug() {
         menuOpen = true;
+        consoleOpen = false;
         menuPanel.setVisibility(View.GONE);
         settingsPanel.setVisibility(View.GONE);
         debugPanel.setVisibility(View.VISIBLE);
+        hideConsolePanel();
         nativeSetUiPaused(true);
         debugHub.setPaused(true);
         debugHub.lifecycle("openDebug");
     }
 
-    private void closeOverlays() {
-        menuOpen = false;
+    private void openConsole() {
+        if (!consoleUiEnabled() || consolePanel == null) {
+            return;
+        }
+        menuOpen = true;
+        consoleOpen = true;
         menuPanel.setVisibility(View.GONE);
         settingsPanel.setVisibility(View.GONE);
         debugPanel.setVisibility(View.GONE);
+        consolePanel.setVisibility(View.VISIBLE);
+        nativeSetUiPaused(true);
+        debugHub.setPaused(true);
+        zeroAllControls("OPEN_CONSOLE");
+        refreshConsoleOutput();
+        if (consoleInput != null) {
+            consoleInput.requestFocus();
+        }
+        if (debugHub != null) {
+            debugHub.lifecycle("openConsole");
+        }
+    }
+
+    private void toggleConsole() {
+        if (consoleOpen) {
+            closeOverlays();
+        } else {
+            openConsole();
+        }
+    }
+
+    private void hideConsolePanel() {
+        if (consolePanel != null) {
+            consolePanel.setVisibility(View.GONE);
+        }
+    }
+
+    private void closeOverlays() {
+        menuOpen = false;
+        consoleOpen = false;
+        menuPanel.setVisibility(View.GONE);
+        settingsPanel.setVisibility(View.GONE);
+        debugPanel.setVisibility(View.GONE);
+        hideConsolePanel();
         nativeSetUiPaused(false);
         debugHub.setPaused(false);
         if (hudAxes != null) {
@@ -619,6 +787,7 @@ public final class VastHallActivity extends Activity implements
 
     private void beginPlayWorld() {
         world = new World(AssetRegistry.withDemoAssets());
+        console = DeveloperConsole.withBuiltins(world);
         world.openLevel("Hall");
         lastWorldTickNs = 0L;
     }
@@ -901,6 +1070,15 @@ public final class VastHallActivity extends Activity implements
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             return super.dispatchKeyEvent(event);
         }
+        if (consoleUiEnabled() && keyCode == KeyEvent.KEYCODE_GRAVE) {
+            if (event.getRepeatCount() == 0 && event.getAction() == KeyEvent.ACTION_DOWN) {
+                toggleConsole();
+            }
+            return true;
+        }
+        if (consoleOpen) {
+            return super.dispatchKeyEvent(event);
+        }
         return handleGameKey(keyCode, event);
     }
 
@@ -922,6 +1100,10 @@ public final class VastHallActivity extends Activity implements
     @Override
     public boolean onKey(View view, int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_BACK) {
+            if (consoleOpen) {
+                closeOverlays();
+                return true;
+            }
             if (menuOpen && debugPanel.getVisibility() == View.VISIBLE) {
                 openMenu();
                 return true;
