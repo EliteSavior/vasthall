@@ -276,7 +276,9 @@ public final class World {
                     .append(fmt(t.rotation.yaw)).append(',').append(fmt(t.rotation.roll))
                     .append(" scale=").append(fmt(t.scale.x)).append(',')
                     .append(fmt(t.scale.y)).append(',').append(fmt(t.scale.z))
+                    .append(" components=").append(actor.componentCount())
                     .append('\n');
+            actor.appendComponentDump(out);
         }
     }
 

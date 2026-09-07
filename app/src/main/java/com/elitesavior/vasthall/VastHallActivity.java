@@ -29,6 +29,7 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.elitesavior.vasthall.engine.Actor;
 import com.elitesavior.vasthall.engine.HallBeaconActor;
 import com.elitesavior.vasthall.engine.Level;
 import com.elitesavior.vasthall.engine.LevelDefinition;
@@ -661,17 +662,22 @@ public final class VastHallActivity extends Activity implements
         } else if (levels.size() > 1) {
             levelBit = levels.size() + "lv ";
         }
+        int componentCount = 0;
+        for (Actor actor : world.actors()) {
+            componentCount += actor.componentCount();
+        }
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %sactors=%d  %s",
+                "SCENE %sactors=%d comps=%d  %s",
                 levelBit,
                 world.actorCount(),
+                componentCount,
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.19.0";
+        String version = "0.20.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {

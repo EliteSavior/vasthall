@@ -3,7 +3,9 @@ package com.elitesavior.vasthall.engine;
 /**
  * Demo actor placed by the Hall sample level so the Scene/Actor layer is visible.
  * Bobs on Y and yaws every tick. Native hall mesh is still owned by
- * {@code libvasthall.so}; this is the Java-side engine object.
+ * {@code libvasthall.so}; this is the Java-side engine object. Ships a
+ * {@link TagComponent} {@code beacon} so the dump shows a component without
+ * changing native locomotion.
  */
 public class HallBeaconActor extends Actor {
     public static final String DEFAULT_NAME = "HallBeacon";
@@ -16,6 +18,7 @@ public class HallBeaconActor extends Actor {
     public HallBeaconActor() {
         setName(DEFAULT_NAME);
         setActorTickEnabled(true);
+        addComponent(new TagComponent("beacon"));
     }
 
     @Override
