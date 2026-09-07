@@ -1,7 +1,7 @@
 package com.elitesavior.vasthall.engine;
 
 /**
- * Demo actor spawned at play start so the Scene/Actor layer is visible.
+ * Demo actor placed by the Hall sample level so the Scene/Actor layer is visible.
  * Bobs on Y and yaws every tick. Native hall mesh is still owned by
  * {@code libvasthall.so}; this is the Java-side engine object.
  */

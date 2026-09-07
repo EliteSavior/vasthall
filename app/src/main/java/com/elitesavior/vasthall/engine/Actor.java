@@ -11,6 +11,7 @@ public class Actor {
     private World world;
     private long id;
     private String name;
+    private String levelName;
     private final Transform transform = Transform.identity();
     private boolean tickEnabled = true;
     private boolean pendingKill;
@@ -32,6 +33,11 @@ public class Actor {
 
     public World world() {
         return world;
+    }
+
+    /** Name of the loaded {@link Level} that spawned this actor, or null. */
+    public String levelName() {
+        return levelName;
     }
 
     public Transform transform() {
@@ -63,12 +69,17 @@ public class Actor {
         this.world = world;
         this.id = id;
         this.pendingKill = false;
+        this.levelName = null;
         if (spawnTransform != null) {
             this.transform.copyFrom(spawnTransform);
         }
         if (this.name == null) {
             this.name = getClass().getSimpleName();
         }
+    }
+
+    void bindLevel(String levelName) {
+        this.levelName = levelName;
     }
 
     void markPendingKill() {
@@ -78,6 +89,7 @@ public class Actor {
     void detach() {
         world = null;
         pendingKill = true;
+        levelName = null;
     }
 
     void callBeginPlay() {

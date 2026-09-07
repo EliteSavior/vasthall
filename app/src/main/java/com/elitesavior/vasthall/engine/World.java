@@ -1,19 +1,27 @@
 package com.elitesavior.vasthall.engine;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Owns {@link Actor}s and ticks them. Unreal mental model: {@code UWorld}.
  *
- * <p>Single-threaded: call spawn / destroy / tick from the same thread
+ * <p>Named {@link Level}s stream into this world via {@link #loadLevel(String)}
+ * / {@link #unloadLevel(String)}. {@link #openLevel(String)} is same-world
+ * OpenLevel: unload loaded streaming levels, then load the named map.
+ *
+ * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
  */
 public final class World {
     private final List<Actor> living = new ArrayList<>();
     private final List<Actor> pendingAdd = new ArrayList<>();
     private final List<Actor> pendingKill = new ArrayList<>();
+    private final Map<String, LevelDefinition> catalog = new LinkedHashMap<>();
+    private final Map<String, Level> loaded = new LinkedHashMap<>();
     private long nextId = 1L;
     private boolean ticking;
     private int frameCount;
@@ -32,6 +40,97 @@ public final class World {
                     failed);
         }
         return spawnActor(actor, transform);
+    }
+
+    public void registerLevel(LevelDefinition definition) {
+        if (definition == null) {
+            throw new IllegalArgumentException("level definition");
+        }
+        catalog.put(definition.name(), definition);
+    }
+
+    /**
+     * Stream {@code name} into this world (Unreal {@code LoadStreamLevel}).
+     * Already-loaded names return the existing {@link Level} without
+     * spawning duplicates.
+     */
+    public Level loadLevel(String name) {
+        if (name == null || name.isEmpty()) {
+            throw new IllegalArgumentException("level name");
+        }
+        Level existing = loaded.get(name);
+        if (existing != null) {
+            return existing;
+        }
+        LevelDefinition definition = catalog.get(name);
+        if (definition == null) {
+            throw new IllegalArgumentException("unknown level: " + name);
+        }
+        Level level = new Level(definition.name());
+        loaded.put(definition.name(), level);
+        for (ActorTemplate template : definition.actors()) {
+            Actor actor = spawnFromTemplate(template);
+            actor.bindLevel(level.name());
+            level.add(actor);
+        }
+        return level;
+    }
+
+    /**
+     * Remove {@code name} and destroy its actors (Unreal {@code UnloadStreamLevel}).
+     * Actors spawned outside this level stay in the world.
+     */
+    public boolean unloadLevel(String name) {
+        Level level = loaded.get(name);
+        if (level == null) {
+            return false;
+        }
+        List<Actor> owned = new ArrayList<>(level.actors());
+        for (Actor actor : owned) {
+            destroyActor(actor);
+        }
+        if (!ticking) {
+            flushPending();
+        }
+        level.clear();
+        loaded.remove(name);
+        return true;
+    }
+
+    /**
+     * Same-world OpenLevel: unload every loaded streaming level, then load
+     * {@code name}. Persistent (unleveled) actors are kept.
+     */
+    public Level openLevel(String name) {
+        List<String> names = new ArrayList<>(loaded.keySet());
+        for (String loadedName : names) {
+            unloadLevel(loadedName);
+        }
+        return loadLevel(name);
+    }
+
+    public boolean isLevelLoaded(String name) {
+        return loaded.containsKey(name);
+    }
+
+    public Level findLoadedLevel(String name) {
+        return loaded.get(name);
+    }
+
+    public List<Level> loadedLevels() {
+        return new ArrayList<>(loaded.values());
+    }
+
+    private Actor spawnFromTemplate(ActorTemplate template) {
+        Class<? extends Actor> type = ActorTypes.resolve(template.className());
+        Actor actor = spawnActor(type, template.transform());
+        if (template.name() != null) {
+            actor.setName(template.name());
+        }
+        if (template.tickEnabled() != null) {
+            actor.setActorTickEnabled(template.tickEnabled());
+        }
+        return actor;
     }
 
     public <T extends Actor> T spawnActor(T actor, Transform transform) {
@@ -65,6 +164,10 @@ public final class World {
     }
 
     public void destroyAll() {
+        List<String> names = new ArrayList<>(loaded.keySet());
+        for (String loadedName : names) {
+            unloadLevel(loadedName);
+        }
         List<Actor> snapshot = new ArrayList<>(living.size() + pendingAdd.size());
         snapshot.addAll(living);
         snapshot.addAll(pendingAdd);
@@ -153,11 +256,19 @@ public final class World {
     public void appendDump(StringBuilder out) {
         out.append("world.actors=").append(actorCount()).append('\n');
         out.append("world.frame=").append(frameCount).append('\n');
+        out.append("world.levels=").append(loaded.size()).append('\n');
+        for (Level level : loaded.values()) {
+            out.append("level=").append(level.name())
+                    .append(" actors=").append(level.actorCount())
+                    .append('\n');
+        }
         for (Actor actor : actors()) {
             Transform t = actor.transform();
+            String levelName = actor.levelName();
             out.append("actor id=").append(actor.id())
                     .append(" name=").append(actor.name())
                     .append(" class=").append(actor.getClass().getSimpleName())
+                    .append(" level=").append(levelName == null ? "-" : levelName)
                     .append(" tick=").append(actor.isActorTickEnabled() ? 1 : 0)
                     .append(" loc=").append(fmt(t.location.x)).append(',')
                     .append(fmt(t.location.y)).append(',').append(fmt(t.location.z))
@@ -172,6 +283,7 @@ public final class World {
     private void flushPending() {
         if (!pendingKill.isEmpty()) {
             for (Actor actor : pendingKill) {
+                forgetFromLevel(actor);
                 living.remove(actor);
                 pendingAdd.remove(actor);
                 actor.callEndPlay();
@@ -190,6 +302,17 @@ public final class World {
             }
             living.add(actor);
             actor.callBeginPlay();
+        }
+    }
+
+    private void forgetFromLevel(Actor actor) {
+        String levelName = actor.levelName();
+        if (levelName == null) {
+            return;
+        }
+        Level level = loaded.get(levelName);
+        if (level != null) {
+            level.remove(actor);
         }
     }
 
