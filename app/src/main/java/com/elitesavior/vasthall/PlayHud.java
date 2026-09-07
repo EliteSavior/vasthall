@@ -3,6 +3,7 @@ package com.elitesavior.vasthall;
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
@@ -41,7 +42,7 @@ final class PlayHud extends FrameLayout {
         addView(row, new FrameLayout.LayoutParams(
                 LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         if (jump != null) {
-            LayoutParams jumpLp = jump.getLayoutParams();
+            ViewGroup.LayoutParams jumpLp = jump.getLayoutParams();
             if (jumpLp instanceof FrameLayout.LayoutParams) {
                 addView(jump, jumpLp);
             } else {
