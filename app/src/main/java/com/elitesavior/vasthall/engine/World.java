@@ -165,6 +165,31 @@ public final class World {
         return new ArrayList<>(loaded.values());
     }
 
+    /**
+     * Bind a live actor to a loaded streaming level so unload / OpenLevel
+     * destroy it with that map. No-op if the level is not loaded.
+     */
+    void bindActorToLoadedLevel(Actor actor, String levelName) {
+        if (actor == null || actor.world() != this) {
+            return;
+        }
+        Level level = findLoadedLevel(levelName);
+        if (level == null) {
+            return;
+        }
+        String previous = actor.levelName();
+        if (previous != null && !previous.equals(level.name())) {
+            Level old = loaded.get(previous);
+            if (old != null) {
+                old.remove(actor);
+            }
+        }
+        actor.bindLevel(level.name());
+        if (!level.contains(actor)) {
+            level.add(actor);
+        }
+    }
+
     private Actor spawnFromTemplate(ActorTemplate template) {
         Class<? extends Actor> type = ActorTypes.resolve(template.className());
         Actor actor = spawnActor(type, template.transform());

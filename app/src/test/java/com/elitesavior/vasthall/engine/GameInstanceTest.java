@@ -115,7 +115,40 @@ public final class GameInstanceTest {
         Actor pawn = game.world().findActor(PlayerPawn.DEFAULT_NAME);
         assertNotNull(pawn);
         assertTrue(pawn instanceof PlayerPawn);
-        assertNull(pawn.levelName());
+        assertEquals("Empty", pawn.levelName());
+    }
+
+    @Test
+    public void defaultPawnDoesNotSurviveTravelToAMapThatPlacesOne() {
+        game.world().registerLevel(LevelDefinition.named("Empty").gameMode("HallGameMode"));
+        game.openLevel("Empty");
+        assertEquals(1, game.world().actorsOf(PlayerPawn.class).size());
+
+        game.openLevel("Hall");
+
+        assertEquals(1, game.world().actorsOf(PlayerPawn.class).size());
+        Actor pawn = game.world().findActor(PlayerPawn.DEFAULT_NAME);
+        assertNotNull(pawn);
+        assertEquals("Hall", pawn.levelName());
+        assertEquals(2, game.world().actorCount());
+    }
+
+    @Test
+    public void unknownLevelDoesNotTearDownCurrentSession() {
+        game.openLevel("Hall");
+        GameMode mode = game.gameMode();
+
+        try {
+            game.openLevel("MissingMap");
+            fail("expected unknown level");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("unknown level"));
+        }
+
+        assertTrue(game.world().isLevelLoaded("Hall"));
+        assertSame(mode, game.gameMode());
+        assertTrue(mode.hasStarted());
+        assertEquals(2, game.world().actorCount());
     }
 
     @Test

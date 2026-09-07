@@ -77,6 +77,10 @@ public final class GameInstance {
 
     public Level openLevel(String name, String options) {
         ensureInit();
+        LevelDefinition definition = assets.findLevel(name);
+        if (definition == null) {
+            throw new IllegalArgumentException("unknown level: " + name);
+        }
         Class<? extends GameMode> modeClass = resolveGameModeClass(name);
         teardownGameMode();
         Level level = world.openLevel(name);

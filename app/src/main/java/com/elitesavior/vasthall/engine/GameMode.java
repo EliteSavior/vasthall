@@ -94,7 +94,12 @@ public class GameMode {
         if (type == null) {
             return null;
         }
-        return world.spawnActor(type, Transform.identity());
+        Actor pawn = world.spawnActor(type, Transform.identity());
+        List<Level> levels = world.loadedLevels();
+        if (levels.size() == 1) {
+            world.bindActorToLoadedLevel(pawn, levels.get(0).name());
+        }
+        return pawn;
     }
 
     void bind(GameInstance game, World world) {

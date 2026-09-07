@@ -153,7 +153,7 @@ world.registerLevel(LevelDefinition.named("Arena").gameMode("ArenaGameMode"));
 game.openLevel("Arena");
 ```
 
-`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. HUD / PlayerController / GameState are out of scope this version.
+`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. HUD / PlayerController / GameState are out of scope this version.
 
 ## Register and load an asset
 
