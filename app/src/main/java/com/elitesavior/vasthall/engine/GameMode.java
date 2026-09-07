@@ -65,6 +65,10 @@ public class GameMode {
         return world == null ? null : world.timerManager();
     }
 
+    public EventDispatcher events() {
+        return world == null ? null : world.events();
+    }
+
     public int initCount() {
         return initCount;
     }

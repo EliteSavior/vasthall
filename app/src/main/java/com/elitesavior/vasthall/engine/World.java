@@ -17,6 +17,7 @@ import java.util.Map;
  * {@link GameInstance#openLevel(String)} so a {@link GameMode} is installed.
  * Level definitions are resolved through {@link #assets()}.
  * {@link #timerManager()} is the world's {@code FTimerManager}.
+ * {@link #events()} is the world's multicast event bus.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -25,8 +26,11 @@ public final class World {
     private final List<Actor> living = new ArrayList<>();
     private final List<Actor> pendingAdd = new ArrayList<>();
     private final List<Actor> pendingKill = new ArrayList<>();
+    private final List<LevelEvent> pendingLevelLoaded = new ArrayList<>();
+    private final List<LevelEvent> pendingLevelUnloaded = new ArrayList<>();
     private final AssetRegistry assets;
     private final TimerManager timers = new TimerManager();
+    private final EventDispatcher events = new EventDispatcher();
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -56,6 +60,10 @@ public final class World {
 
     public TimerManager timerManager() {
         return timers;
+    }
+
+    public EventDispatcher events() {
+        return events;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -110,6 +118,7 @@ public final class World {
             actor.bindLevel(level.name());
             level.add(actor);
         }
+        announceLevelLoaded(definition.name());
         return level;
     }
 
@@ -133,6 +142,7 @@ public final class World {
         }
         level.clear();
         loaded.remove(name);
+        announceLevelUnloaded(name);
         return true;
     }
 
@@ -198,14 +208,21 @@ public final class World {
 
     private Actor spawnFromTemplate(ActorTemplate template) {
         Class<? extends Actor> type = ActorTypes.resolve(template.className());
-        Actor actor = spawnActor(type, template.transform());
+        Actor actor;
+        try {
+            actor = type.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException failed) {
+            throw new IllegalArgumentException(
+                    "Actor type needs a public no-arg constructor: " + type.getName(),
+                    failed);
+        }
         if (template.name() != null) {
             actor.setName(template.name());
         }
         if (template.tickEnabled() != null) {
             actor.setActorTickEnabled(template.tickEnabled());
         }
-        return actor;
+        return spawnActor(actor, template.transform());
     }
 
     public <T extends Actor> T spawnActor(T actor, Transform transform) {
@@ -222,6 +239,7 @@ public final class World {
         } else {
             living.add(actor);
             actor.callBeginPlay();
+            broadcastActorSpawned(actor);
         }
         return actor;
     }
@@ -345,6 +363,7 @@ public final class World {
         out.append("world.frame=").append(frameCount).append('\n');
         out.append("world.levels=").append(loaded.size()).append('\n');
         timers.appendDump(out);
+        events.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())
@@ -378,22 +397,67 @@ public final class World {
                 living.remove(actor);
                 pendingAdd.remove(actor);
                 actor.callEndPlay();
+                broadcastActorDestroyed(actor);
                 actor.detach();
             }
             pendingKill.clear();
         }
-        if (pendingAdd.isEmpty()) {
-            return;
-        }
-        List<Actor> added = new ArrayList<>(pendingAdd);
-        pendingAdd.clear();
-        for (Actor actor : added) {
-            if (actor.isPendingKill()) {
-                continue;
+        if (!pendingAdd.isEmpty()) {
+            List<Actor> added = new ArrayList<>(pendingAdd);
+            pendingAdd.clear();
+            for (Actor actor : added) {
+                if (actor.isPendingKill()) {
+                    continue;
+                }
+                living.add(actor);
+                actor.callBeginPlay();
+                broadcastActorSpawned(actor);
             }
-            living.add(actor);
-            actor.callBeginPlay();
         }
+        flushPendingLevelEvents();
+    }
+
+    private void announceLevelLoaded(String name) {
+        LevelEvent event = new LevelEvent(this, name);
+        if (ticking) {
+            pendingLevelLoaded.add(event);
+        } else {
+            events.broadcast(EventType.LEVEL_LOADED, event);
+        }
+    }
+
+    private void announceLevelUnloaded(String name) {
+        LevelEvent event = new LevelEvent(this, name);
+        if (ticking) {
+            pendingLevelUnloaded.add(event);
+        } else {
+            events.broadcast(EventType.LEVEL_UNLOADED, event);
+        }
+    }
+
+    private void flushPendingLevelEvents() {
+        if (!pendingLevelUnloaded.isEmpty()) {
+            List<LevelEvent> unloaded = new ArrayList<>(pendingLevelUnloaded);
+            pendingLevelUnloaded.clear();
+            for (LevelEvent event : unloaded) {
+                events.broadcast(EventType.LEVEL_UNLOADED, event);
+            }
+        }
+        if (!pendingLevelLoaded.isEmpty()) {
+            List<LevelEvent> loadedEvents = new ArrayList<>(pendingLevelLoaded);
+            pendingLevelLoaded.clear();
+            for (LevelEvent event : loadedEvents) {
+                events.broadcast(EventType.LEVEL_LOADED, event);
+            }
+        }
+    }
+
+    private void broadcastActorSpawned(Actor actor) {
+        events.broadcast(EventType.ACTOR_SPAWNED, new ActorEvent(this, actor));
+    }
+
+    private void broadcastActorDestroyed(Actor actor) {
+        events.broadcast(EventType.ACTOR_DESTROYED, new ActorEvent(this, actor));
     }
 
     private void forgetFromLevel(Actor actor) {

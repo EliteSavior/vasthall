@@ -1,5 +1,7 @@
 package com.elitesavior.vasthall.engine;
 
+import java.util.function.Consumer;
+
 /**
  * Unreal-style helpers over {@link World} / {@link GameInstance} level
  * streaming.
@@ -11,7 +13,8 @@ package com.elitesavior.vasthall.engine;
  * {@link GameMode} is installed or torn down. {@link #findAsset} /
  * {@link #loadAsset} look up the world's {@link AssetRegistry}.
  * {@link #getTimerManager} / {@link #setTimer} reach the world's
- * {@link TimerManager}.
+ * {@link TimerManager}. {@link #getEventDispatcher} / {@link #bindEvent}
+ * reach the world's {@link EventDispatcher}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -67,6 +70,19 @@ public final class GameplayStatics {
 
     public static void clearTimer(World world, TimerHandle handle) {
         getTimerManager(world).clearTimer(handle);
+    }
+
+    public static EventDispatcher getEventDispatcher(World world) {
+        return requireWorld(world).events();
+    }
+
+    public static <T> DelegateHandle bindEvent(
+            World world, EventType<T> type, Consumer<T> listener) {
+        return getEventDispatcher(world).bind(type, listener);
+    }
+
+    public static void unbindEvent(World world, DelegateHandle handle) {
+        getEventDispatcher(world).unbind(handle);
     }
 
     /** Soft lookup. Missing names return null. */

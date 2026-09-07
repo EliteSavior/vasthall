@@ -34,6 +34,8 @@ public final class GameInstanceTest {
         assertSame(game.world(), game.console().world());
         assertSame(game, game.world().gameInstance());
         assertSame(game.timerManager(), game.world().timerManager());
+        assertSame(game.events(), game.world().events());
+        assertEquals(4, game.events().listenerCount());
         assertEquals(4, game.assets().size());
         assertNull(game.gameMode());
     }
@@ -214,6 +216,7 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("world.actors=2"));
         assertTrue(dump.contains("world.levels=1"));
         assertTrue(dump.contains("world.timers=1"));
+        assertTrue(dump.contains("world.events=6"));
     }
 
     @Test

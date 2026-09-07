@@ -45,6 +45,10 @@ public class Actor {
         return world == null ? null : world.timerManager();
     }
 
+    public EventDispatcher events() {
+        return world == null ? null : world.events();
+    }
+
     /**
      * Schedule a callback on this actor's world {@link TimerManager}.
      * Cleared automatically in {@link #endPlay()}.
