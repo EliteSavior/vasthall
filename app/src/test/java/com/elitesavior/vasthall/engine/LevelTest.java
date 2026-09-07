@@ -169,6 +169,7 @@ public final class LevelTest {
     public void hallJsonResourceParsesAndLoadsTheDemoLevel() {
         LevelDefinition parsed = LevelJson.parse(readClasspath("levels/Hall.json"));
         assertEquals("Hall", parsed.name());
+        assertEquals("HallGameMode", parsed.gameModeClassName());
         assertEquals(2, parsed.actors().size());
         assertEquals("PlayerPawn", parsed.actors().get(0).className());
         assertEquals("HallBeaconActor", parsed.actors().get(1).className());

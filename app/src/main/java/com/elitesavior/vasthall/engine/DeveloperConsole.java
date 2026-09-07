@@ -134,7 +134,7 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode counts", this::statCommand);
     }
 
     private String helpCommand(World bound, String[] args) {
@@ -216,10 +216,14 @@ public final class DeveloperConsole {
 
     private String statCommand(World bound, String[] args) {
         World live = requireWorld(bound);
+        String mode = live.gameMode() == null
+                ? "-"
+                : live.gameMode().getClass().getSimpleName();
         return "actors=" + live.actorCount()
                 + " levels=" + live.loadedLevels().size()
                 + " assets=" + live.assets().size()
-                + " frame=" + live.frameCount();
+                + " frame=" + live.frameCount()
+                + " mode=" + mode;
     }
 
     private Entry find(String name) {

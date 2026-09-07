@@ -9,9 +9,12 @@ import java.util.Map;
 /**
  * Owns {@link Actor}s and ticks them. Unreal mental model: {@code UWorld}.
  *
- * <p>Named {@link Level}s stream into this world via {@link #loadLevel(String)}
- * / {@link #unloadLevel(String)}. {@link #openLevel(String)} is same-world
- * OpenLevel: unload loaded streaming levels, then load the named map.
+ * <p>A {@link GameInstance} may own this world for the life of the play
+ * session. Named {@link Level}s stream into this world via
+ * {@link #loadLevel(String)} / {@link #unloadLevel(String)}.
+ * {@link #openLevel(String)} is same-world OpenLevel: unload loaded
+ * streaming levels, then load the named map. Prefer
+ * {@link GameInstance#openLevel(String)} so a {@link GameMode} is installed.
  * Level definitions are resolved through {@link #assets()}.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
@@ -23,6 +26,8 @@ public final class World {
     private final List<Actor> pendingKill = new ArrayList<>();
     private final AssetRegistry assets;
     private final Map<String, Level> loaded = new LinkedHashMap<>();
+    private GameInstance gameInstance;
+    private GameMode gameMode;
     private long nextId = 1L;
     private boolean ticking;
     private int frameCount;
@@ -37,6 +42,22 @@ public final class World {
 
     public AssetRegistry assets() {
         return assets;
+    }
+
+    public GameInstance gameInstance() {
+        return gameInstance;
+    }
+
+    public GameMode gameMode() {
+        return gameMode;
+    }
+
+    void bindGameInstance(GameInstance gameInstance) {
+        this.gameInstance = gameInstance;
+    }
+
+    void setGameMode(GameMode gameMode) {
+        this.gameMode = gameMode;
     }
 
     public <T extends Actor> T spawnActor(Class<T> type) {
@@ -277,6 +298,16 @@ public final class World {
     }
 
     public void appendDump(StringBuilder out) {
+        out.append("game.instance=").append(gameInstance == null ? 0 : 1).append('\n');
+        if (gameMode == null) {
+            out.append("game.mode=-\n");
+        } else {
+            Class<? extends Actor> pawn = gameMode.defaultPawnClass();
+            out.append("game.mode=").append(gameMode.getClass().getSimpleName())
+                    .append(" pawn=").append(pawn == null ? "-" : pawn.getSimpleName())
+                    .append(" started=").append(gameMode.hasStarted() ? 1 : 0)
+                    .append('\n');
+        }
         out.append("world.actors=").append(actorCount()).append('\n');
         out.append("world.frame=").append(frameCount).append('\n');
         out.append("world.levels=").append(loaded.size()).append('\n');

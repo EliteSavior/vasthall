@@ -1,5 +1,6 @@
 {
   "name": "Hall",
+  "gameMode": "HallGameMode",
   "actors": [
     {
       "class": "PlayerPawn",
