@@ -7,28 +7,20 @@ import java.util.Map;
 
 /**
  * Named set of key → action mappings. Unreal analog:
- * {@code UInputMappingContext}. The default asset lives at
- * {@code input/DefaultMapping.json}.
+ * {@code UInputMappingContext} (a {@code UDataAsset}). The default
+ * asset lives at {@code input/DefaultMapping.json}.
  */
-public final class InputMappingContext {
-    private final String name;
+public final class InputMappingContext extends DataAsset {
     private final Map<String, InputAction> actions = new LinkedHashMap<>();
     private final List<InputMapping> mappings = new ArrayList<>();
 
     public InputMappingContext(String name) {
-        if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("mapping context name");
-        }
-        this.name = name.trim();
+        super(name);
     }
 
     /** Loads {@code input/DefaultMapping.json}. */
     public static InputMappingContext defaults() {
         return InputMappingJson.loadDefault();
-    }
-
-    public String name() {
-        return name;
     }
 
     public InputMappingContext addAction(InputAction action) {

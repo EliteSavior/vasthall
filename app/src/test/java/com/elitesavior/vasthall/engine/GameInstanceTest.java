@@ -40,7 +40,7 @@ public final class GameInstanceTest {
         assertSame(game.input(), game.world().input());
         assertSame(game.playerController(), game.world().playerController());
         assertEquals(6, game.events().listenerCount());
-        assertEquals(5, game.assets().size());
+        assertEquals(6, game.assets().size());
         assertNull(game.gameMode());
     }
 
@@ -94,7 +94,7 @@ public final class GameInstanceTest {
         assertEquals(1, hallMode.endCount());
         assertTrue(game.gameMode() instanceof HallGameMode);
         assertTrue(console.log().get(0).startsWith("> stat"));
-        assertEquals(5 + 1, assets.size());
+        assertEquals(6 + 1, assets.size());
 
         assertTrue(game.unloadLevel("Side"));
         assertFalse(world.isLevelLoaded("Side"));

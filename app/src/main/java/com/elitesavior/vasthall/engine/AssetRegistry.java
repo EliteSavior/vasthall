@@ -11,8 +11,8 @@ import java.util.Map;
  *
  * <p>Does not package, cook, or stream bytes. It indexes handles
  * ({@link LevelDefinition}, {@link MeshHandle}, {@link TextureHandle},
- * {@link AudioHandle}, {@link InputMappingContext}) so gameplay code
- * stops hardcoding one-off loads.
+ * {@link AudioHandle}, {@link InputMappingContext}, {@link DataAsset})
+ * so gameplay code stops hardcoding one-off loads.
  */
 public final class AssetRegistry {
     public static final String HALL_LEVEL_ID = "Hall";
@@ -25,6 +25,8 @@ public final class AssetRegistry {
     public static final String HALL_AMBIENCE_PATH = "/Game/Audio/HallAmbience";
     public static final String DEFAULT_MAPPING_ID = "DefaultMapping";
     public static final String DEFAULT_MAPPING_PATH = "/Game/Input/DefaultMapping";
+    public static final String HALL_BLADE_ID = "HallBlade";
+    public static final String HALL_BLADE_PATH = "/Game/Data/HallBlade";
 
     private final Map<String, Asset> byId = new LinkedHashMap<>();
     private final Map<String, String> aliasToId = new LinkedHashMap<>();
@@ -37,7 +39,8 @@ public final class AssetRegistry {
 
     /**
      * Built-in Hall sample: classpath {@code levels/Hall.json} plus mesh /
-     * texture / audio stubs and the default Input Mapping Context.
+     * texture / audio stubs, the default Input Mapping Context, and the
+     * HallBlade weapon DataAsset.
      */
     public void registerDemoAssets() {
         registerLevel(LevelDefinition.hall());
@@ -57,6 +60,57 @@ public final class AssetRegistry {
                 DEFAULT_MAPPING_PATH,
                 AssetKind.INPUT_MAPPING,
                 InputMappingContext.defaults());
+        registerDataAsset(HALL_BLADE_ID, HALL_BLADE_PATH, WeaponDataAsset.hallBlade());
+    }
+
+    /**
+     * Register a {@link DataAsset} at {@code /Game/Data/{name}}.
+     * {@link InputMappingContext} rows use {@link AssetKind#INPUT_MAPPING};
+     * other subclasses use {@link AssetKind#DATA}.
+     */
+    public Asset registerDataAsset(DataAsset payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("data asset");
+        }
+        return registerDataAsset(payload.name(), "/Game/Data/" + payload.name(), payload);
+    }
+
+    public Asset registerDataAsset(String id, String path, DataAsset payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("data asset");
+        }
+        AssetKind kind = payload instanceof InputMappingContext
+                ? AssetKind.INPUT_MAPPING
+                : AssetKind.DATA;
+        return register(id, path, kind, payload);
+    }
+
+    public DataAsset findDataAsset(String idOrPath) {
+        return findDataAsset(idOrPath, DataAsset.class);
+    }
+
+    public <T extends DataAsset> T findDataAsset(String idOrPath, Class<T> type) {
+        Asset asset = find(idOrPath);
+        if (asset == null) {
+            return null;
+        }
+        return asset.as(type);
+    }
+
+    public <T extends DataAsset> T requireDataAsset(String idOrPath, Class<T> type) {
+        Asset asset = find(idOrPath);
+        if (asset == null) {
+            throw new IllegalArgumentException("unknown data asset: " + idOrPath);
+        }
+        T data = asset.as(type);
+        if (data == null) {
+            String actual = asset.payload() instanceof DataAsset
+                    ? ((DataAsset) asset.payload()).assetType()
+                    : asset.kind().name();
+            throw new IllegalArgumentException(
+                    "data asset type mismatch: " + idOrPath + " (" + actual + ")");
+        }
+        return data;
     }
 
     public Asset registerLevel(LevelDefinition definition) {
@@ -85,6 +139,12 @@ public final class AssetRegistry {
         }
         if (kind == AssetKind.LEVEL && !(payload instanceof LevelDefinition)) {
             throw new IllegalArgumentException("LEVEL payload must be LevelDefinition");
+        }
+        if (kind == AssetKind.DATA && !(payload instanceof DataAsset)) {
+            throw new IllegalArgumentException("DATA payload must be DataAsset");
+        }
+        if (kind == AssetKind.INPUT_MAPPING && !(payload instanceof InputMappingContext)) {
+            throw new IllegalArgumentException("INPUT_MAPPING payload must be InputMappingContext");
         }
         assertKeyAvailable(trimmedId, trimmedId);
         if (!trimmedPath.equals(trimmedId)) {
@@ -162,8 +222,12 @@ public final class AssetRegistry {
         for (Asset asset : byId.values()) {
             out.append("asset id=").append(asset.id())
                     .append(" path=").append(asset.path())
-                    .append(" kind=").append(asset.kind().name())
-                    .append('\n');
+                    .append(" kind=").append(asset.kind().name());
+            DataAsset data = asset.as(DataAsset.class);
+            if (data != null) {
+                out.append(" type=").append(data.assetType());
+            }
+            out.append('\n');
         }
     }
 

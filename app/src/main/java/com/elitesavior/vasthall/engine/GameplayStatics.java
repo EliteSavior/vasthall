@@ -11,8 +11,9 @@ import java.util.function.Consumer;
  * → {@link #unloadLevel}; {@code OpenLevel} → {@link #openLevel} (same-world
  * travel: unload loaded streaming levels, then load the named map). When the
  * world is owned by a {@link GameInstance}, open/unload go through it so
- * {@link GameMode} is installed or torn down. {@link #findAsset} /
- * {@link #loadAsset} look up the world's {@link AssetRegistry}.
+ * {@link GameMode} is installed or torn down. {@link #findAsset} / {@link #loadAsset} /
+ * {@link #findDataAsset} / {@link #loadDataAsset} look up the world's
+ * {@link AssetRegistry}.
  * {@link #getTimerManager} / {@link #setTimer} reach the world's
  * {@link TimerManager}. {@link #getEventDispatcher} / {@link #bindEvent}
  * reach the world's {@link EventDispatcher}. {@link #createSaveGame} /
@@ -107,6 +108,22 @@ public final class GameplayStatics {
     /** Hard lookup. Missing names throw {@code unknown asset}. */
     public static Asset loadAsset(World world, String idOrPath) {
         return requireWorld(world).assets().require(idOrPath);
+    }
+
+    /** Soft DataAsset lookup. Missing names or wrong type return null. */
+    public static DataAsset findDataAsset(World world, String idOrPath) {
+        return requireWorld(world).assets().findDataAsset(idOrPath);
+    }
+
+    public static <T extends DataAsset> T findDataAsset(
+            World world, String idOrPath, Class<T> type) {
+        return requireWorld(world).assets().findDataAsset(idOrPath, type);
+    }
+
+    /** Hard DataAsset lookup. Missing names or wrong type throw. */
+    public static <T extends DataAsset> T loadDataAsset(
+            World world, String idOrPath, Class<T> type) {
+        return requireWorld(world).assets().requireDataAsset(idOrPath, type);
     }
 
     public static SaveGame createSaveGame(GameInstance game) {
