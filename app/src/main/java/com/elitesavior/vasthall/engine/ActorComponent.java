@@ -1,5 +1,7 @@
 package com.elitesavior.vasthall.engine;
 
+import java.util.ArrayList;
+
 /**
  * Piece of actor behavior owned by an {@link Actor}. Unreal mental model:
  * {@code UActorComponent}.
@@ -10,11 +12,40 @@ package com.elitesavior.vasthall.engine;
  */
 public class ActorComponent {
     private Actor owner;
+    private final ArrayList<TimerHandle> ownedTimers = new ArrayList<>();
     private boolean tickEnabled = true;
     private boolean attached;
 
     public Actor owner() {
         return owner;
+    }
+
+    public TimerManager timerManager() {
+        return owner == null ? null : owner.timerManager();
+    }
+
+    /**
+     * Schedule a callback on the owner actor's world {@link TimerManager}.
+     * Cleared automatically in {@link #onDetach()}.
+     */
+    public TimerHandle setTimer(Runnable callback, float rateSeconds, boolean looping) {
+        TimerManager manager = timerManager();
+        if (manager == null) {
+            throw new IllegalStateException("no world");
+        }
+        TimerHandle handle = manager.setTimer(callback, rateSeconds, looping);
+        ownedTimers.add(handle);
+        return handle;
+    }
+
+    public void clearTimer(TimerHandle handle) {
+        TimerManager manager = timerManager();
+        if (manager != null) {
+            manager.clearTimer(handle);
+        } else if (handle != null) {
+            handle.invalidate();
+        }
+        ownedTimers.remove(handle);
     }
 
     public boolean isAttached() {
@@ -39,6 +70,7 @@ public class ActorComponent {
         try {
             onDetach();
         } finally {
+            clearOwnedTimers();
             this.owner = null;
             this.attached = false;
         }
@@ -57,6 +89,18 @@ public class ActorComponent {
 
     /** Extra dump fields; subclasses append {@code " key=value"} fragments. */
     protected void appendDumpFields(StringBuilder out) {
+    }
+
+    private void clearOwnedTimers() {
+        TimerManager manager = timerManager();
+        for (TimerHandle handle : ownedTimers) {
+            if (manager != null) {
+                manager.clearTimer(handle);
+            } else if (handle != null) {
+                handle.invalidate();
+            }
+        }
+        ownedTimers.clear();
     }
 
     /** Called once when the component is added to an actor. */

@@ -16,6 +16,7 @@ import java.util.Map;
  * streaming levels, then load the named map. Prefer
  * {@link GameInstance#openLevel(String)} so a {@link GameMode} is installed.
  * Level definitions are resolved through {@link #assets()}.
+ * {@link #timerManager()} is the world's {@code FTimerManager}.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -25,6 +26,7 @@ public final class World {
     private final List<Actor> pendingAdd = new ArrayList<>();
     private final List<Actor> pendingKill = new ArrayList<>();
     private final AssetRegistry assets;
+    private final TimerManager timers = new TimerManager();
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -50,6 +52,10 @@ public final class World {
 
     public GameMode gameMode() {
         return gameMode;
+    }
+
+    public TimerManager timerManager() {
+        return timers;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -247,11 +253,13 @@ public final class World {
             return;
         }
         flushPending();
+        timers.clearAll();
     }
 
     public void tick(float deltaSeconds) {
         ticking = true;
         try {
+            timers.tick(deltaSeconds);
             for (int i = 0; i < living.size(); i++) {
                 Actor actor = living.get(i);
                 if (!actor.isPendingKill() && actor.isActorTickEnabled()) {
@@ -336,6 +344,7 @@ public final class World {
         out.append("world.actors=").append(actorCount()).append('\n');
         out.append("world.frame=").append(frameCount).append('\n');
         out.append("world.levels=").append(loaded.size()).append('\n');
+        timers.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())

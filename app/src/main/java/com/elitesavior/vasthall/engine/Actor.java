@@ -18,6 +18,7 @@ public class Actor {
     private String levelName;
     private final Transform transform = Transform.identity();
     private final List<ActorComponent> components = new ArrayList<>();
+    private final List<TimerHandle> ownedTimers = new ArrayList<>();
     private boolean tickEnabled = true;
     private boolean pendingKill;
 
@@ -38,6 +39,34 @@ public class Actor {
 
     public World world() {
         return world;
+    }
+
+    public TimerManager timerManager() {
+        return world == null ? null : world.timerManager();
+    }
+
+    /**
+     * Schedule a callback on this actor's world {@link TimerManager}.
+     * Cleared automatically in {@link #endPlay()}.
+     */
+    public TimerHandle setTimer(Runnable callback, float rateSeconds, boolean looping) {
+        TimerManager manager = timerManager();
+        if (manager == null) {
+            throw new IllegalStateException("no world");
+        }
+        TimerHandle handle = manager.setTimer(callback, rateSeconds, looping);
+        ownedTimers.add(handle);
+        return handle;
+    }
+
+    public void clearTimer(TimerHandle handle) {
+        TimerManager manager = timerManager();
+        if (manager != null) {
+            manager.clearTimer(handle);
+        } else if (handle != null) {
+            handle.invalidate();
+        }
+        ownedTimers.remove(handle);
     }
 
     /** Registry lookup by id or path. Null if this actor is not in a world. */
@@ -179,6 +208,7 @@ public class Actor {
         try {
             endPlay();
         } finally {
+            clearOwnedTimers();
             destroyComponents();
         }
     }
@@ -197,6 +227,18 @@ public class Actor {
         for (ActorComponent component : components) {
             component.appendDump(out);
         }
+    }
+
+    private void clearOwnedTimers() {
+        TimerManager manager = timerManager();
+        for (TimerHandle handle : ownedTimers) {
+            if (manager != null) {
+                manager.clearTimer(handle);
+            } else if (handle != null) {
+                handle.invalidate();
+            }
+        }
+        ownedTimers.clear();
     }
 
     private void destroyComponents() {

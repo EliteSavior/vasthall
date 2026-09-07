@@ -2,8 +2,9 @@ package com.elitesavior.vasthall.engine;
 
 /**
  * Long-lived game singleton. Unreal mental model: {@code UGameInstance} —
- * owns the {@link World}, {@link AssetRegistry}, and {@link DeveloperConsole}
- * across level travel. {@link GameMode} is created per {@link #openLevel}.
+ * owns the {@link World}, {@link AssetRegistry}, {@link DeveloperConsole},
+ * and that world's {@link TimerManager} across level travel.
+ * {@link GameMode} is created per {@link #openLevel}.
  *
  * <p>Startup flow: {@code Init} → {@link #init()} → {@link #openLevel(String)}
  * → {@link GameMode#initGame(String)} / {@link GameMode#startPlay()}.
@@ -53,6 +54,10 @@ public final class GameInstance {
 
     public DeveloperConsole console() {
         return console;
+    }
+
+    public TimerManager timerManager() {
+        return world.timerManager();
     }
 
     public GameMode gameMode() {

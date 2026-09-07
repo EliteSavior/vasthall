@@ -32,6 +32,8 @@ public final class DeveloperConsole {
 
     private World world;
     private final Map<String, Entry> commands = new LinkedHashMap<>();
+    private final Map<Long, TimerHandle> scheduled = new LinkedHashMap<>();
+    private TimerHandle lastTimer;
     private static final int LOG_CAP = 80;
 
     private final List<String> log = new ArrayList<>();
@@ -107,11 +109,19 @@ public final class DeveloperConsole {
                 output = "error: " + (message == null ? failed.getClass().getSimpleName() : message);
             }
         }
-        log.add("> " + trimmed + "\n" + output);
+        appendLog("> " + trimmed + "\n" + output);
+        return output;
+    }
+
+    /** Append a line (timer callbacks, notes). Same cap as {@link #exec(String)}. */
+    public void appendLog(String line) {
+        if (line == null || line.isEmpty()) {
+            return;
+        }
+        log.add(line);
         while (log.size() > LOG_CAP) {
             log.remove(0);
         }
-        return output;
     }
 
     public List<String> log() {
@@ -134,7 +144,10 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame/mode counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode/timer counts", this::statCommand);
+        register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
+        register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
+        register("timers", "List active TimerManager timers", this::timersCommand);
     }
 
     private String helpCommand(World bound, String[] args) {
@@ -223,7 +236,92 @@ public final class DeveloperConsole {
                 + " levels=" + live.loadedLevels().size()
                 + " assets=" + live.assets().size()
                 + " frame=" + live.frameCount()
-                + " mode=" + mode;
+                + " mode=" + mode
+                + " timers=" + live.timerManager().timerCount();
+    }
+
+    private String setTimerCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        if (args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("delay seconds");
+        }
+        float delay;
+        try {
+            delay = Float.parseFloat(args[0]);
+        } catch (NumberFormatException failed) {
+            throw new IllegalArgumentException("delay seconds");
+        }
+        boolean looping = false;
+        int messageStart = 1;
+        if (args.length > 1
+                && ("loop".equalsIgnoreCase(args[1]) || "once".equalsIgnoreCase(args[1]))) {
+            looping = "loop".equalsIgnoreCase(args[1]);
+            messageStart = 2;
+        }
+        String message = messageStart < args.length ? joinArgs(args, messageStart) : "timer";
+        final long[] idHolder = new long[1];
+        final boolean loop = looping;
+        TimerHandle handle = live.timerManager().setTimer(() -> {
+            appendLog("timer fired id=" + idHolder[0] + " " + message);
+            if (!loop) {
+                scheduled.remove(idHolder[0]);
+            }
+        }, delay, looping);
+        idHolder[0] = handle.id();
+        scheduled.put(handle.id(), handle);
+        lastTimer = handle;
+        return "timer " + handle.id() + " set " + fmt(delay) + "s " + (looping ? "loop" : "once");
+    }
+
+    private String clearTimerCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        TimerHandle handle;
+        if (args.length == 0) {
+            handle = lastTimer;
+        } else {
+            long id;
+            try {
+                id = Long.parseLong(args[0]);
+            } catch (NumberFormatException failed) {
+                throw new IllegalArgumentException("timer id");
+            }
+            handle = scheduled.get(id);
+            if (handle == null) {
+                handle = live.timerManager().findTimer(id);
+            }
+        }
+        if (handle == null || !handle.isValid()) {
+            return "no timer";
+        }
+        long id = handle.id();
+        live.timerManager().clearTimer(handle);
+        scheduled.remove(id);
+        if (lastTimer == handle) {
+            lastTimer = null;
+        }
+        return "cleared " + id;
+    }
+
+    private String timersCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        TimerManager manager = live.timerManager();
+        StringBuilder out = new StringBuilder();
+        out.append("timers=").append(manager.timerCount()).append('\n');
+        for (String line : manager.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
+    }
+
+    private static String joinArgs(String[] args, int start) {
+        StringBuilder out = new StringBuilder();
+        for (int i = start; i < args.length; i++) {
+            if (i > start) {
+                out.append(' ');
+            }
+            out.append(args[i]);
+        }
+        return out.toString();
     }
 
     private Entry find(String name) {

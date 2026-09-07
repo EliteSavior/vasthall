@@ -842,18 +842,19 @@ public final class VastHallActivity extends Activity implements
         String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %s%sactors=%d comps=%d assets=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d  %s",
                 levelBit,
                 modeBit,
                 world.actorCount(),
                 componentCount,
                 world.assets().size(),
+                world.timerManager().timerCount(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.23.0";
+        String version = "0.24.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
