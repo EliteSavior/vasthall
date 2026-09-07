@@ -70,6 +70,7 @@ public final class DeveloperConsoleTest {
         assertTrue(all.contains("settimer"));
         assertTrue(all.contains("cleartimer"));
         assertTrue(all.contains("timers"));
+        assertTrue(all.contains("events"));
         String one = console.exec("help actors");
         assertTrue(one.toLowerCase().contains("actor"));
         assertEquals(console.helpText("actors"), one.trim());

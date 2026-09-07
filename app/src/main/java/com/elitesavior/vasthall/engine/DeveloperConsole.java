@@ -33,6 +33,7 @@ public final class DeveloperConsole {
     private World world;
     private final Map<String, Entry> commands = new LinkedHashMap<>();
     private final Map<Long, TimerHandle> scheduled = new LinkedHashMap<>();
+    private final List<DelegateHandle> eventBinds = new ArrayList<>();
     private TimerHandle lastTimer;
     private static final int LOG_CAP = 80;
 
@@ -57,7 +58,9 @@ public final class DeveloperConsole {
     }
 
     public void setWorld(World world) {
+        unbindEngineEvents();
         this.world = world;
+        bindEngineEvents();
     }
 
     public void register(String name, String help, Command command) {
@@ -148,6 +151,8 @@ public final class DeveloperConsole {
         register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
+        register("events", "List EventDispatcher listener counts", this::eventsCommand);
+        bindEngineEvents();
     }
 
     private String helpCommand(World bound, String[] args) {
@@ -237,7 +242,8 @@ public final class DeveloperConsole {
                 + " assets=" + live.assets().size()
                 + " frame=" + live.frameCount()
                 + " mode=" + mode
-                + " timers=" + live.timerManager().timerCount();
+                + " timers=" + live.timerManager().timerCount()
+                + " events=" + live.events().listenerCount();
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -300,6 +306,58 @@ public final class DeveloperConsole {
             lastTimer = null;
         }
         return "cleared " + id;
+    }
+
+    private String eventsCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        EventDispatcher dispatcher = live.events();
+        StringBuilder out = new StringBuilder();
+        out.append("events=").append(dispatcher.listenerCount()).append('\n');
+        for (String line : dispatcher.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
+    }
+
+    private void bindEngineEvents() {
+        if (world == null) {
+            return;
+        }
+        EventDispatcher dispatcher = world.events();
+        eventBinds.add(dispatcher.bind(EventType.LEVEL_LOADED, this::onLevelLoaded));
+        eventBinds.add(dispatcher.bind(EventType.LEVEL_UNLOADED, this::onLevelUnloaded));
+        eventBinds.add(dispatcher.bind(EventType.ACTOR_SPAWNED, this::onActorSpawned));
+        eventBinds.add(dispatcher.bind(EventType.ACTOR_DESTROYED, this::onActorDestroyed));
+    }
+
+    private void unbindEngineEvents() {
+        if (world == null) {
+            eventBinds.clear();
+            return;
+        }
+        EventDispatcher dispatcher = world.events();
+        for (DelegateHandle handle : eventBinds) {
+            dispatcher.unbind(handle);
+        }
+        eventBinds.clear();
+    }
+
+    private void onLevelLoaded(LevelEvent event) {
+        appendLog("event LevelLoaded " + event.levelName());
+    }
+
+    private void onLevelUnloaded(LevelEvent event) {
+        appendLog("event LevelUnloaded " + event.levelName());
+    }
+
+    private void onActorSpawned(ActorEvent event) {
+        Actor actor = event.actor();
+        appendLog("event ActorSpawned " + (actor == null ? "-" : actor.name()));
+    }
+
+    private void onActorDestroyed(ActorEvent event) {
+        Actor actor = event.actor();
+        appendLog("event ActorDestroyed " + (actor == null ? "-" : actor.name()));
     }
 
     private String timersCommand(World bound, String[] args) {

@@ -17,6 +17,7 @@ import java.util.Map;
  * {@link GameInstance#openLevel(String)} so a {@link GameMode} is installed.
  * Level definitions are resolved through {@link #assets()}.
  * {@link #timerManager()} is the world's {@code FTimerManager}.
+ * {@link #events()} is the world's multicast event bus.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -27,6 +28,7 @@ public final class World {
     private final List<Actor> pendingKill = new ArrayList<>();
     private final AssetRegistry assets;
     private final TimerManager timers = new TimerManager();
+    private final EventDispatcher events = new EventDispatcher();
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -56,6 +58,10 @@ public final class World {
 
     public TimerManager timerManager() {
         return timers;
+    }
+
+    public EventDispatcher events() {
+        return events;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -110,6 +116,7 @@ public final class World {
             actor.bindLevel(level.name());
             level.add(actor);
         }
+        events.broadcast(EventType.LEVEL_LOADED, new LevelEvent(this, definition.name()));
         return level;
     }
 
@@ -133,6 +140,7 @@ public final class World {
         }
         level.clear();
         loaded.remove(name);
+        events.broadcast(EventType.LEVEL_UNLOADED, new LevelEvent(this, name));
         return true;
     }
 
@@ -222,6 +230,7 @@ public final class World {
         } else {
             living.add(actor);
             actor.callBeginPlay();
+            broadcastActorSpawned(actor);
         }
         return actor;
     }
@@ -345,6 +354,7 @@ public final class World {
         out.append("world.frame=").append(frameCount).append('\n');
         out.append("world.levels=").append(loaded.size()).append('\n');
         timers.appendDump(out);
+        events.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())
@@ -378,6 +388,7 @@ public final class World {
                 living.remove(actor);
                 pendingAdd.remove(actor);
                 actor.callEndPlay();
+                broadcastActorDestroyed(actor);
                 actor.detach();
             }
             pendingKill.clear();
@@ -393,7 +404,16 @@ public final class World {
             }
             living.add(actor);
             actor.callBeginPlay();
+            broadcastActorSpawned(actor);
         }
+    }
+
+    private void broadcastActorSpawned(Actor actor) {
+        events.broadcast(EventType.ACTOR_SPAWNED, new ActorEvent(this, actor));
+    }
+
+    private void broadcastActorDestroyed(Actor actor) {
+        events.broadcast(EventType.ACTOR_DESTROYED, new ActorEvent(this, actor));
     }
 
     private void forgetFromLevel(Actor actor) {
