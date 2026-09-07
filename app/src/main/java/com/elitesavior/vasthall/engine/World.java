@@ -19,6 +19,7 @@ import java.util.Map;
  * {@link #timerManager()} is the world's {@code FTimerManager}.
  * {@link #events()} is the world's multicast event bus.
  * {@link #audio()} is the world's {@code UAudioDevice}-lite mixer.
+ * {@link #viewport()} is the world's UMG-lite widget host.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -33,6 +34,7 @@ public final class World {
     private final TimerManager timers = new TimerManager();
     private final EventDispatcher events = new EventDispatcher();
     private final AudioManager audio;
+    private final WidgetViewport viewport = new WidgetViewport();
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -71,6 +73,10 @@ public final class World {
 
     public AudioManager audio() {
         return audio;
+    }
+
+    public WidgetViewport viewport() {
+        return viewport;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -280,6 +286,7 @@ public final class World {
         flushPending();
         timers.clearAll();
         audio.stopAll();
+        viewport.removeAll();
     }
 
     public void tick(float deltaSeconds) {
@@ -375,6 +382,7 @@ public final class World {
         timers.appendDump(out);
         events.appendDump(out);
         audio.appendDump(out);
+        viewport.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())

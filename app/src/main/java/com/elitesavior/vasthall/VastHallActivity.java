@@ -81,6 +81,7 @@ public final class VastHallActivity extends Activity implements
     private World world;
     private DeveloperConsole console;
     private TextView engineMark;
+    private WidgetOverlay widgetOverlay;
     private long lastWorldTickNs;
     private boolean consoleOpen;
 
@@ -304,6 +305,15 @@ public final class VastHallActivity extends Activity implements
         engineLp.topMargin = dp(10);
         root.addView(engineMark, engineLp);
 
+        widgetOverlay = new WidgetOverlay(this);
+        FrameLayout.LayoutParams widgetLp =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT);
+        widgetLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        widgetLp.topMargin = dp(36);
+        root.addView(widgetOverlay, widgetLp);
+
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getSystemWindowInsetTop();
             if (insets.getDisplayCutout() != null) {
@@ -315,6 +325,8 @@ public final class VastHallActivity extends Activity implements
             dbgMark.setLayoutParams(dbgLp);
             engineLp.topMargin = dp(8) + top;
             engineMark.setLayoutParams(engineLp);
+            widgetLp.topMargin = dp(34) + top;
+            widgetOverlay.setLayoutParams(widgetLp);
             if (consoleButton != null && consoleBtnLp != null) {
                 consoleBtnLp.topMargin = dp(8) + top;
                 consoleButton.setLayoutParams(consoleBtnLp);
@@ -794,6 +806,9 @@ public final class VastHallActivity extends Activity implements
         game.openLevel("Hall");
         world = game.world();
         console = game.console();
+        if (widgetOverlay != null) {
+            widgetOverlay.bind(world.viewport());
+        }
         lastWorldTickNs = 0L;
     }
 
@@ -843,7 +858,7 @@ public final class VastHallActivity extends Activity implements
         String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d audio=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d audio=%d widgets=%d  %s",
                 levelBit,
                 modeBit,
                 world.actorCount(),
@@ -853,12 +868,13 @@ public final class VastHallActivity extends Activity implements
                 world.events().listenerCount(),
                 game == null ? 0 : game.saveSlots().size(),
                 world.audio().playingCount(),
+                world.viewport().viewportCount(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.27.0";
+        String version = "0.28.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
@@ -1000,6 +1016,9 @@ public final class VastHallActivity extends Activity implements
         }
         if (hudAxes != null) {
             hudAxes.stop();
+        }
+        if (widgetOverlay != null) {
+            widgetOverlay.bind(null);
         }
         if (game != null) {
             game.shutdown();

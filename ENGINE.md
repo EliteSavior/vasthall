@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, and an AudioManager; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, and a WidgetViewport; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -8,8 +8,8 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
-| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, AudioManager, SaveGameSystem across travel |
-| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds |
+| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, AudioManager, WidgetViewport, SaveGameSystem across travel |
+| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds + sample HUD widget |
 | `TimerManager` / `TimerHandle` | `FTimerManager` / `FTimerHandle` | SetTimer by delay, loop, clear, pause/unpause |
 | `EventDispatcher` / `MulticastDelegate` / `DelegateHandle` | Event Dispatcher / `FMulticastDelegate` / `FDelegateHandle` | Typed bind / unbind / broadcast |
 | `EventType` | declared multicast / gameplay-message tag | `LevelLoaded`, `ActorSpawned`, … or `EventType.of(name, payload)` |
@@ -23,7 +23,9 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Level` | loaded `ULevel` | Actors currently owned by one loaded map |
 | `SaveGame` / `SaveGameSystem` | `USaveGame` + slot APIs | Create / save / load / does-exist / delete a JSON slot |
 | `AudioManager` / `AudioDevice` | `UAudioDevice` + `PlaySound2D` | Play / stop registered `AUDIO` by id; master volume; silent foss device |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` |
+| `Widget` / `TextWidget` | `UUserWidget` / `UTextBlock` | Create, show, hide, remove-from-parent |
+| `WidgetViewport` / `WidgetHost` | game viewport + AddToViewport | Named HUD slots; silent host or Android overlay |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
@@ -39,7 +41,7 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names, in order:
 
 1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
-2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, `WidgetViewport`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
 3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
 4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
 
@@ -58,6 +60,7 @@ game.console();                         // same DeveloperConsole
 game.timerManager();                    // same TimerManager (on the World)
 game.events();                          // same EventDispatcher (on the World)
 game.audio();                           // same AudioManager (on the World)
+game.viewport();                        // same WidgetViewport (on the World)
 game.saves();                           // same SaveGameSystem (slot directory)
 game.gameMode();                        // HallGameMode for Hall.json
 ```
@@ -162,7 +165,7 @@ world.registerLevel(LevelDefinition.named("Arena").gameMode("ArenaGameMode"));
 game.openLevel("Arena");
 ```
 
-`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. `HallGameMode.startPlay` also sets a one-shot `TimerManager` hook after `HallGameMode.DELAYED_START_SECONDS` (0.25s) and binds `ActorSpawned` / `LevelUnloaded` (cleared in `endPlay`). HUD / PlayerController / GameState are out of scope this version.
+`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. `HallGameMode.startPlay` also sets a one-shot `TimerManager` hook after `HallGameMode.DELAYED_START_SECONDS` (0.25s), binds `ActorSpawned` / `LevelUnloaded` (cleared in `endPlay`), and `CreateWidget`s a sample `TextWidget` `HallTitle` (`HALL`) then `AddToViewport`. PlayerController / GameState / a UMG designer are out of scope this version.
 
 ## TimerManager
 
@@ -361,6 +364,58 @@ StopSound HallAmbience
 
 Names are case-insensitive (`playsound` / `stopsound` / `setmastervolume`). Missing ids return `error: unknown sound: …`.
 
+## Widget / UI layer (UMG-lite)
+
+Unreal mental model: `CreateWidget` → `AddToViewport` / `SetVisibility` / `RemoveFromParent`. Java widgets are gameplay objects on the world's `WidgetViewport`. They are **not** Android Views and they do **not** sit inside `PlayHud` (the stick router is unchanged). The activity attaches a wrap-content `WidgetOverlay` sibling that mirrors viewport slots and always returns `false` from touch dispatch so look/move/jump keep the existing stack.
+
+```java
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.TextWidget;
+import com.elitesavior.vasthall.engine.WidgetViewport;
+import com.elitesavior.vasthall.engine.World;
+
+World world = game.world();
+WidgetViewport viewport = world.viewport();          // same as game.viewport()
+
+TextWidget label = viewport.createWidget(TextWidget.class, "Hint");
+label.setText("Hello");
+label.addToViewport();                               // now visible
+label.hide();                                        // still slotted
+label.show();
+label.removeFromParent();                            // slot dropped; name still findable
+viewport.destroyWidget(label);                       // forget the name
+
+GameplayStatics.createWidget(world, TextWidget.class, "Hint");
+GameplayStatics.addToViewport(world, "Hint");
+GameplayStatics.hideWidget(world, "Hint");
+GameplayStatics.showWidget(world, "Hint");
+GameplayStatics.removeFromParent(world, "Hint");
+```
+
+| Call | What it does |
+| --- | --- |
+| `createWidget(type, name)` | `CreateWidget` — construct, do not show. Duplicate names throw |
+| `addToViewport` | Slot the widget on the root HUD host. Idempotent if already added |
+| `hide` / `show` / `setVisibility` | `SetVisibility`. Hide keeps the viewport slot |
+| `removeFromParent` | Drop the slot. False if it was not added |
+| `destroyWidget` | Remove + forget so GameMode can recreate the name on travel |
+| `find` / `viewportCount` / `visibleCount` | Query by name; slotted vs Visible |
+
+`HallGameMode.startPlay` creates `HallTitle` (`TextWidget`, text `HALL`) and adds it to the viewport. `endPlay` destroys it. Tests inject a `WidgetHost` (`setHost`) to record add/remove/change without Android. The foss overlay is a small top-center label; a full UMG designer / button hit-test stack is out of scope.
+
+Console demo (fossDebug `~`):
+
+```
+CreateWidget Text Hint Hello Hall
+AddToViewport Hint
+HideWidget Hint
+ShowWidget Hint
+widgets
+RemoveFromParent Hint
+```
+
+Names are case-insensitive (`createwidget` / `addtoviewport` / `hidewidget` / `showwidget` / `removefromparent`). Missing names return `error: unknown widget: …`.
+
 ## Register and load an asset
 
 Unreal Content Browser mental model, without an editor: every piece of content has a **short id** and a **path**. Register once on the world's `AssetRegistry`. Look up later by either key. Missing names return null (`find`) or throw `unknown asset` (`require` / `GameplayStatics.loadAsset`).
@@ -436,6 +491,9 @@ console.exec("PlaySound HallAmbience");
 console.exec("SetMasterVolume 0.5");
 console.exec("audio");
 console.exec("StopSound HallAmbience");
+console.exec("CreateWidget Text Hint Hello");
+console.exec("AddToViewport Hint");
+console.exec("widgets");
 console.register("ping", "Echo ping", (bound, args) -> "pong");
 ```
 
@@ -447,7 +505,7 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=… widgets=…` |
 | `settimer <seconds> [once\|loop] [message]` | `SetTimer` — delayed console log |
 | `cleartimer [id]` | `ClearTimer` (last handle if id omitted) |
 | `timers` | List active TimerManager entries |
@@ -458,6 +516,11 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `stopsound <id>` (`StopSound`) | Stop that voice |
 | `setmastervolume <0-1>` (`SetMasterVolume`) | Clamp and set mixer gain |
 | `audio` | List playing AudioManager voices |
+| `createwidget <class> <name> [text]` (`CreateWidget`) | Construct a widget (does not show) |
+| `addtoviewport <name>` (`AddToViewport`) | Slot it on the HUD host |
+| `hidewidget <name>` / `showwidget <name>` | `SetVisibility` Hidden / Visible |
+| `removefromparent <name>` (`RemoveFromParent`) | Drop the viewport slot |
+| `widgets` | List WidgetViewport names / visibility |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -590,7 +653,7 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1 events=6 saves=0 audio=0  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=6` is the console's four engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1 events=6 saves=0 audio=0 widgets=1  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=6` is the console's four engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -602,6 +665,7 @@ world.levels=1
 world.timers=1
 world.events=6
 world.audio=0
+world.widgets=1
 world.assets=4
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
@@ -628,3 +692,4 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 - Component replication / Blueprint components
 - A `TransformComponent` (transform is already on `Actor`)
 - Spatial / 3D audio, attenuation, FMOD, MediaPlayer / SoundPool hardware decode
+- A full UMG designer / Widget Blueprint editor / button hit-test stack

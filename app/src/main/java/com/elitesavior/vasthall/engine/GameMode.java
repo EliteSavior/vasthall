@@ -73,6 +73,10 @@ public class GameMode {
         return world == null ? null : world.audio();
     }
 
+    public WidgetViewport viewport() {
+        return world == null ? null : world.viewport();
+    }
+
     public int initCount() {
         return initCount;
     }

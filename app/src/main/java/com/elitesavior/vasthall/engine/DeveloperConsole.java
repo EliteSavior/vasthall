@@ -147,7 +147,7 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame/mode/timer/audio counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode/timer/audio/widget counts", this::statCommand);
         register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
@@ -158,6 +158,12 @@ public final class DeveloperConsole {
         register("stopsound", "StopSound <id>", this::stopSoundCommand);
         register("setmastervolume", "SetMasterVolume <0-1>", this::setMasterVolumeCommand);
         register("audio", "List playing AudioManager voices", this::audioCommand);
+        register("createwidget", "CreateWidget <class> <name> [text]", this::createWidgetCommand);
+        register("addtoviewport", "AddToViewport <name>", this::addToViewportCommand);
+        register("hidewidget", "HideWidget <name>", this::hideWidgetCommand);
+        register("showwidget", "ShowWidget <name>", this::showWidgetCommand);
+        register("removefromparent", "RemoveFromParent <name>", this::removeFromParentCommand);
+        register("widgets", "List WidgetViewport slots", this::widgetsCommand);
         bindEngineEvents();
     }
 
@@ -252,7 +258,8 @@ public final class DeveloperConsole {
                 + " timers=" + live.timerManager().timerCount()
                 + " events=" + live.events().listenerCount()
                 + " saves=" + saves
-                + " audio=" + live.audio().playingCount();
+                + " audio=" + live.audio().playingCount()
+                + " widgets=" + live.viewport().viewportCount();
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -390,6 +397,59 @@ public final class DeveloperConsole {
         return out.toString().trim();
     }
 
+    private String createWidgetCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        if (args.length < 2 || args[0] == null || args[0].isEmpty()
+                || args[1] == null || args[1].isEmpty()) {
+            throw new IllegalArgumentException("widget class and name");
+        }
+        Widget widget = live.viewport().createWidget(args[0], args[1]);
+        if (widget instanceof TextWidget && args.length > 2) {
+            ((TextWidget) widget).setText(joinArgs(args, 2));
+        }
+        return "created " + widget.name()
+                + " class=" + widget.getClass().getSimpleName();
+    }
+
+    private String addToViewportCommand(World bound, String[] args) {
+        Widget widget = requireWidget(bound, args);
+        if (!widget.addToViewport()) {
+            throw new IllegalStateException("add failed: " + widget.name());
+        }
+        return "viewport " + widget.name();
+    }
+
+    private String hideWidgetCommand(World bound, String[] args) {
+        Widget widget = requireWidget(bound, args);
+        widget.hide();
+        return "hidden " + widget.name();
+    }
+
+    private String showWidgetCommand(World bound, String[] args) {
+        Widget widget = requireWidget(bound, args);
+        widget.show();
+        return "shown " + widget.name();
+    }
+
+    private String removeFromParentCommand(World bound, String[] args) {
+        Widget widget = requireWidget(bound, args);
+        if (!widget.removeFromParent()) {
+            throw new IllegalArgumentException("not on viewport: " + widget.name());
+        }
+        return "removed " + widget.name();
+    }
+
+    private String widgetsCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        WidgetViewport viewport = live.viewport();
+        StringBuilder out = new StringBuilder();
+        out.append("widgets=").append(viewport.viewportCount()).append('\n');
+        for (String line : viewport.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
+    }
+
     private String eventsCommand(World bound, String[] args) {
         World live = requireWorld(bound);
         EventDispatcher dispatcher = live.events();
@@ -485,6 +545,18 @@ public final class DeveloperConsole {
             throw new IllegalArgumentException("no game instance");
         }
         return game;
+    }
+
+    private static Widget requireWidget(World world, String[] args) {
+        World live = requireWorld(world);
+        if (args == null || args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("widget name");
+        }
+        Widget widget = live.viewport().find(args[0]);
+        if (widget == null) {
+            throw new IllegalArgumentException("unknown widget: " + args[0]);
+        }
+        return widget;
     }
 
     private static String requireSoundId(String[] args) {

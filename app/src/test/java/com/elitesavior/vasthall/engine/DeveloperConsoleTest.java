@@ -77,6 +77,12 @@ public final class DeveloperConsoleTest {
         assertTrue(all.contains("stopsound"));
         assertTrue(all.contains("setmastervolume"));
         assertTrue(all.contains("audio"));
+        assertTrue(all.contains("createwidget"));
+        assertTrue(all.contains("addtoviewport"));
+        assertTrue(all.contains("hidewidget"));
+        assertTrue(all.contains("showwidget"));
+        assertTrue(all.contains("removefromparent"));
+        assertTrue(all.contains("widgets"));
         String one = console.exec("help actors");
         assertTrue(one.toLowerCase().contains("actor"));
         assertEquals(console.helpText("actors"), one.trim());
@@ -158,6 +164,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("timers=0"));
         assertTrue(out.contains("saves=0"));
         assertTrue(out.contains("audio=0"));
+        assertTrue(out.contains("widgets=0"));
     }
 
     @Test

@@ -220,6 +220,7 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("world.timers=1"));
         assertTrue(dump.contains("world.events=6"));
         assertTrue(dump.contains("world.audio=0"));
+        assertTrue(dump.contains("world.widgets=1"));
     }
 
     @Test
