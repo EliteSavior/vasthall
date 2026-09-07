@@ -141,6 +141,10 @@ public final class DebugHubTest {
         assertTrue(dump.contains("name=PlayerPawn"));
         assertTrue(dump.contains("name=HallBeacon"));
         assertTrue(dump.contains("class=HallBeaconActor"));
+        assertTrue(dump.contains("components=1"));
+        assertTrue(dump.contains("component class=TagComponent"));
+        assertTrue(dump.contains("tags=pawn"));
+        assertTrue(dump.contains("tags=beacon"));
     }
 
     private static MotionEvent event(int pointerId, int action, float x, float y) {
