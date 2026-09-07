@@ -73,6 +73,10 @@ public final class DeveloperConsoleTest {
         assertTrue(all.contains("events"));
         assertTrue(all.contains("savegame"));
         assertTrue(all.contains("loadgame"));
+        assertTrue(all.contains("playsound"));
+        assertTrue(all.contains("stopsound"));
+        assertTrue(all.contains("setmastervolume"));
+        assertTrue(all.contains("audio"));
         String one = console.exec("help actors");
         assertTrue(one.toLowerCase().contains("actor"));
         assertEquals(console.helpText("actors"), one.trim());
@@ -153,6 +157,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("mode=-"));
         assertTrue(out.contains("timers=0"));
         assertTrue(out.contains("saves=0"));
+        assertTrue(out.contains("audio=0"));
     }
 
     @Test

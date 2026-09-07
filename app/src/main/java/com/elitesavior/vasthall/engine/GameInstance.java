@@ -6,8 +6,8 @@ import java.util.List;
 /**
  * Long-lived game singleton. Unreal mental model: {@code UGameInstance} —
  * owns the {@link World}, {@link AssetRegistry}, {@link DeveloperConsole},
- * that world's {@link TimerManager}, {@link EventDispatcher}, and
- * {@link SaveGameSystem} across level travel.
+ * that world's {@link TimerManager}, {@link EventDispatcher},
+ * {@link AudioManager}, and {@link SaveGameSystem} across level travel.
  * {@link GameMode} is created per {@link #openLevel}.
  *
  * <p>Startup flow: {@code Init} → {@link #init()} → {@link #openLevel(String)}
@@ -67,6 +67,10 @@ public final class GameInstance {
 
     public EventDispatcher events() {
         return world.events();
+    }
+
+    public AudioManager audio() {
+        return world.audio();
     }
 
     public SaveGameSystem saves() {

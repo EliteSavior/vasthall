@@ -69,6 +69,10 @@ public class GameMode {
         return world == null ? null : world.events();
     }
 
+    public AudioManager audio() {
+        return world == null ? null : world.audio();
+    }
+
     public int initCount() {
         return initCount;
     }

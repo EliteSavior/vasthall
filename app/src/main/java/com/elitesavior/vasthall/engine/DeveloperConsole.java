@@ -147,13 +147,17 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame/mode/timer counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode/timer/audio counts", this::statCommand);
         register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
         register("events", "List EventDispatcher listener counts", this::eventsCommand);
         register("savegame", "SaveGame <slot>", this::saveGameCommand);
         register("loadgame", "LoadGame <slot>", this::loadGameCommand);
+        register("playsound", "PlaySound <id>", this::playSoundCommand);
+        register("stopsound", "StopSound <id>", this::stopSoundCommand);
+        register("setmastervolume", "SetMasterVolume <0-1>", this::setMasterVolumeCommand);
+        register("audio", "List playing AudioManager voices", this::audioCommand);
         bindEngineEvents();
     }
 
@@ -247,7 +251,8 @@ public final class DeveloperConsole {
                 + " mode=" + mode
                 + " timers=" + live.timerManager().timerCount()
                 + " events=" + live.events().listenerCount()
-                + " saves=" + saves;
+                + " saves=" + saves
+                + " audio=" + live.audio().playingCount();
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -335,6 +340,54 @@ public final class DeveloperConsole {
         }
         String level = currentLevelName(game.world());
         return "loaded " + slot + " level=" + level + " actors=" + game.world().actorCount();
+    }
+
+    private String playSoundCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        String id = requireSoundId(args);
+        if (!live.audio().play(id)) {
+            throw new IllegalArgumentException("unknown sound: " + id);
+        }
+        Asset asset = live.assets().find(id);
+        String resolved = asset == null ? id : asset.id();
+        return "playing " + resolved;
+    }
+
+    private String stopSoundCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        String id = requireSoundId(args);
+        if (!live.audio().stop(id)) {
+            throw new IllegalArgumentException("not playing: " + id);
+        }
+        Asset asset = live.assets().find(id);
+        String resolved = asset == null ? id : asset.id();
+        return "stopped " + resolved;
+    }
+
+    private String setMasterVolumeCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        if (args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("volume");
+        }
+        float volume;
+        try {
+            volume = Float.parseFloat(args[0]);
+        } catch (NumberFormatException failed) {
+            throw new IllegalArgumentException("volume");
+        }
+        live.audio().setMasterVolume(volume);
+        return "volume " + fmt(live.audio().masterVolume());
+    }
+
+    private String audioCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        AudioManager audio = live.audio();
+        StringBuilder out = new StringBuilder();
+        out.append("audio=").append(audio.playingCount()).append('\n');
+        for (String line : audio.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
     }
 
     private String eventsCommand(World bound, String[] args) {
@@ -432,6 +485,13 @@ public final class DeveloperConsole {
             throw new IllegalArgumentException("no game instance");
         }
         return game;
+    }
+
+    private static String requireSoundId(String[] args) {
+        if (args == null || args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("sound id");
+        }
+        return args[0];
     }
 
     private static String requireSlotName(String[] args) {

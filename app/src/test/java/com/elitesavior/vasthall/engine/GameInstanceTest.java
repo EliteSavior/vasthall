@@ -35,6 +35,7 @@ public final class GameInstanceTest {
         assertSame(game, game.world().gameInstance());
         assertSame(game.timerManager(), game.world().timerManager());
         assertSame(game.events(), game.world().events());
+        assertSame(game.audio(), game.world().audio());
         assertEquals(4, game.events().listenerCount());
         assertEquals(4, game.assets().size());
         assertNull(game.gameMode());
@@ -218,6 +219,7 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("world.levels=1"));
         assertTrue(dump.contains("world.timers=1"));
         assertTrue(dump.contains("world.events=6"));
+        assertTrue(dump.contains("world.audio=0"));
     }
 
     @Test

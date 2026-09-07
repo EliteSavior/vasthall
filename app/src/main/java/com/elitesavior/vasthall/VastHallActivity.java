@@ -843,7 +843,7 @@ public final class VastHallActivity extends Activity implements
         String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d audio=%d  %s",
                 levelBit,
                 modeBit,
                 world.actorCount(),
@@ -852,12 +852,13 @@ public final class VastHallActivity extends Activity implements
                 world.timerManager().timerCount(),
                 world.events().listenerCount(),
                 game == null ? 0 : game.saveSlots().size(),
+                world.audio().playingCount(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.26.0";
+        String version = "0.27.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
