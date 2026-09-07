@@ -9,9 +9,10 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Named map of actor templates. Register on a {@link World}, then
- * {@link World#loadLevel(String)}. Unreal analog: a {@code UWorld} asset /
- * streaming level definition, not a live loaded instance ({@link Level}).
+ * Named map of actor templates. Register on a {@link World} or
+ * {@link AssetRegistry}, then {@link World#loadLevel(String)}. Unreal analog:
+ * a {@code UWorld} asset / streaming level definition, not a live loaded
+ * instance ({@link Level}).
  */
 public final class LevelDefinition {
     public static final String HALL_RESOURCE = "levels/Hall.json";

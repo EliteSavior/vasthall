@@ -30,9 +30,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.elitesavior.vasthall.engine.Actor;
+import com.elitesavior.vasthall.engine.AssetRegistry;
 import com.elitesavior.vasthall.engine.HallBeaconActor;
 import com.elitesavior.vasthall.engine.Level;
-import com.elitesavior.vasthall.engine.LevelDefinition;
 import com.elitesavior.vasthall.engine.World;
 
 import java.io.File;
@@ -618,8 +618,7 @@ public final class VastHallActivity extends Activity implements
     }
 
     private void beginPlayWorld() {
-        world = new World();
-        world.registerLevel(LevelDefinition.hall());
+        world = new World(AssetRegistry.withDemoAssets());
         world.openLevel("Hall");
         lastWorldTickNs = 0L;
     }
@@ -668,16 +667,17 @@ public final class VastHallActivity extends Activity implements
         }
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %sactors=%d comps=%d  %s",
+                "SCENE %sactors=%d comps=%d assets=%d  %s",
                 levelBit,
                 world.actorCount(),
                 componentCount,
+                world.assets().size(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.20.0";
+        String version = "0.21.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
