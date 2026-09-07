@@ -18,6 +18,7 @@ import java.util.Map;
  * Level definitions are resolved through {@link #assets()}.
  * {@link #timerManager()} is the world's {@code FTimerManager}.
  * {@link #events()} is the world's multicast event bus.
+ * {@link #audio()} is the world's {@code UAudioDevice}-lite mixer.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -31,6 +32,7 @@ public final class World {
     private final AssetRegistry assets;
     private final TimerManager timers = new TimerManager();
     private final EventDispatcher events = new EventDispatcher();
+    private final AudioManager audio;
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -44,6 +46,7 @@ public final class World {
 
     public World(AssetRegistry assets) {
         this.assets = assets == null ? new AssetRegistry() : assets;
+        this.audio = new AudioManager(this.assets);
     }
 
     public AssetRegistry assets() {
@@ -64,6 +67,10 @@ public final class World {
 
     public EventDispatcher events() {
         return events;
+    }
+
+    public AudioManager audio() {
+        return audio;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -272,6 +279,7 @@ public final class World {
         }
         flushPending();
         timers.clearAll();
+        audio.stopAll();
     }
 
     public void tick(float deltaSeconds) {
@@ -366,6 +374,7 @@ public final class World {
         out.append("world.levels=").append(loaded.size()).append('\n');
         timers.appendDump(out);
         events.appendDump(out);
+        audio.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())

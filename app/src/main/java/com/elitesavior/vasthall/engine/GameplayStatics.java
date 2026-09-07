@@ -18,6 +18,8 @@ import java.util.function.Consumer;
  * {@link #saveGameToSlot} / {@link #loadGameFromSlot} /
  * {@link #doesSaveGameExist} / {@link #deleteGameInSlot} persist a
  * {@link SaveGame} through the owning {@link GameInstance}.
+ * {@link #getAudioManager} / {@link #playSound2D} / {@link #stopSound}
+ * / {@link #setMasterVolume} reach the world's {@link AudioManager}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -132,6 +134,35 @@ public final class GameplayStatics {
 
     public static boolean deleteGameInSlot(World world, String slot) {
         return deleteGameInSlot(requireGame(getGameInstance(world)), slot);
+    }
+
+    public static AudioManager getAudioManager(World world) {
+        return requireWorld(world).audio();
+    }
+
+    /** {@code PlaySound2D} — play a registered AUDIO asset. */
+    public static boolean playSound2D(World world, String idOrPath) {
+        return getAudioManager(world).play2D(idOrPath);
+    }
+
+    public static boolean playSound2D(World world, String idOrPath, float volumeScale) {
+        return getAudioManager(world).play2D(idOrPath, volumeScale);
+    }
+
+    public static boolean stopSound(World world, String idOrPath) {
+        return getAudioManager(world).stop(idOrPath);
+    }
+
+    public static boolean isSoundPlaying(World world, String idOrPath) {
+        return getAudioManager(world).isPlaying(idOrPath);
+    }
+
+    public static void setMasterVolume(World world, float volume) {
+        getAudioManager(world).setMasterVolume(volume);
+    }
+
+    public static float getMasterVolume(World world) {
+        return getAudioManager(world).masterVolume();
     }
 
     private static GameInstance requireGame(GameInstance game) {
