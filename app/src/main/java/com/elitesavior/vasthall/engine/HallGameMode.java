@@ -7,15 +7,19 @@ package com.elitesavior.vasthall.engine;
  *
  * <p>{@link #startPlay()} schedules a one-shot {@link TimerManager} hook
  * after {@link #DELAYED_START_SECONDS} as the sample delayed-start use,
- * and binds multicast listeners for later actor-spawn / level-unload
- * engine events.
+ * binds multicast listeners for later actor-spawn / level-unload
+ * engine events, and adds a sample {@link TextWidget} to the viewport
+ * ({@code CreateWidget} + {@code AddToViewport}).
  */
 public class HallGameMode extends GameMode {
     public static final float DELAYED_START_SECONDS = 0.25f;
+    public static final String SAMPLE_WIDGET_NAME = "HallTitle";
+    public static final String SAMPLE_WIDGET_TEXT = "HALL";
 
     private TimerHandle delayedStart;
     private DelegateHandle actorSpawned;
     private DelegateHandle levelUnloaded;
+    private TextWidget sampleWidget;
     private int delayedStartCount;
     private int actorSpawnedCount;
     private int levelUnloadedCount;
@@ -32,6 +36,7 @@ public class HallGameMode extends GameMode {
         if (timers != null) {
             delayedStart = timers.setTimer(this::onDelayedStart, DELAYED_START_SECONDS, false);
         }
+        addSampleWidget();
     }
 
     @Override
@@ -48,6 +53,7 @@ public class HallGameMode extends GameMode {
             timers.clearTimer(delayedStart);
         }
         delayedStart = null;
+        destroySampleWidget();
         super.endPlay();
     }
 
@@ -61,6 +67,32 @@ public class HallGameMode extends GameMode {
 
     public int levelUnloadedCount() {
         return levelUnloadedCount;
+    }
+
+    public TextWidget sampleWidget() {
+        return sampleWidget;
+    }
+
+    private void addSampleWidget() {
+        WidgetViewport host = viewport();
+        if (host == null) {
+            return;
+        }
+        if (host.find(SAMPLE_WIDGET_NAME) != null) {
+            host.destroyWidget(host.find(SAMPLE_WIDGET_NAME));
+        }
+        TextWidget label = host.createWidget(TextWidget.class, SAMPLE_WIDGET_NAME);
+        label.setText(SAMPLE_WIDGET_TEXT);
+        label.addToViewport();
+        sampleWidget = label;
+    }
+
+    private void destroySampleWidget() {
+        WidgetViewport host = viewport();
+        if (host != null && sampleWidget != null) {
+            host.destroyWidget(sampleWidget);
+        }
+        sampleWidget = null;
     }
 
     private void onDelayedStart() {

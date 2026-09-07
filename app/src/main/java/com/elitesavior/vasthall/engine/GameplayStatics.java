@@ -20,6 +20,10 @@ import java.util.function.Consumer;
  * {@link SaveGame} through the owning {@link GameInstance}.
  * {@link #getAudioManager} / {@link #playSound2D} / {@link #stopSound}
  * / {@link #setMasterVolume} reach the world's {@link AudioManager}.
+ * {@link #getWidgetViewport} / {@link #createWidget} /
+ * {@link #addToViewport} / {@link #removeFromParent} /
+ * {@link #showWidget} / {@link #hideWidget} reach the world's
+ * {@link WidgetViewport}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -163,6 +167,49 @@ public final class GameplayStatics {
 
     public static float getMasterVolume(World world) {
         return getAudioManager(world).masterVolume();
+    }
+
+    public static WidgetViewport getWidgetViewport(World world) {
+        return requireWorld(world).viewport();
+    }
+
+    public static <T extends Widget> T createWidget(
+            World world, Class<T> type, String name) {
+        return getWidgetViewport(world).createWidget(type, name);
+    }
+
+    public static Widget createWidget(World world, String typeName, String name) {
+        return getWidgetViewport(world).createWidget(typeName, name);
+    }
+
+    public static boolean addToViewport(World world, Widget widget) {
+        return getWidgetViewport(world).addToViewport(widget);
+    }
+
+    public static boolean addToViewport(World world, String name) {
+        Widget widget = findWidget(world, name);
+        return widget != null && widget.addToViewport();
+    }
+
+    public static boolean removeFromParent(World world, Widget widget) {
+        return getWidgetViewport(world).removeFromParent(widget);
+    }
+
+    public static boolean removeFromParent(World world, String name) {
+        Widget widget = findWidget(world, name);
+        return widget != null && widget.removeFromParent();
+    }
+
+    public static boolean showWidget(World world, String name) {
+        return getWidgetViewport(world).show(name);
+    }
+
+    public static boolean hideWidget(World world, String name) {
+        return getWidgetViewport(world).hide(name);
+    }
+
+    public static Widget findWidget(World world, String name) {
+        return getWidgetViewport(world).find(name);
     }
 
     private static GameInstance requireGame(GameInstance game) {
