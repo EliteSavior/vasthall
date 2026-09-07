@@ -147,7 +147,7 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame/mode/timer/audio/widget counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode/timer/audio/widget/overlap counts", this::statCommand);
         register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
@@ -164,6 +164,9 @@ public final class DeveloperConsole {
         register("showwidget", "ShowWidget <name>", this::showWidgetCommand);
         register("removefromparent", "RemoveFromParent <name>", this::removeFromParentCommand);
         register("widgets", "List WidgetViewport slots", this::widgetsCommand);
+        register("listoverlaps", "List current CollisionWorld overlap pairs", this::listOverlapsCommand);
+        register("overlaps", "Alias for listoverlaps", this::listOverlapsCommand);
+        register("debugdrawoverlaps", "DebugDrawOverlaps <0|1> stub flag", this::debugDrawOverlapsCommand);
         bindEngineEvents();
     }
 
@@ -259,7 +262,8 @@ public final class DeveloperConsole {
                 + " events=" + live.events().listenerCount()
                 + " saves=" + saves
                 + " audio=" + live.audio().playingCount()
-                + " widgets=" + live.viewport().viewportCount();
+                + " widgets=" + live.viewport().viewportCount()
+                + " overlaps=" + live.collision().overlapCount();
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -450,6 +454,35 @@ public final class DeveloperConsole {
         return out.toString().trim();
     }
 
+    private String listOverlapsCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        CollisionWorld collision = live.collision();
+        StringBuilder out = new StringBuilder();
+        out.append("overlaps=").append(collision.overlapCount()).append('\n');
+        for (String line : collision.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
+    }
+
+    private String debugDrawOverlapsCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        if (args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("0 or 1");
+        }
+        String token = args[0];
+        boolean enabled;
+        if ("1".equals(token) || "on".equalsIgnoreCase(token) || "true".equalsIgnoreCase(token)) {
+            enabled = true;
+        } else if ("0".equals(token) || "off".equalsIgnoreCase(token) || "false".equalsIgnoreCase(token)) {
+            enabled = false;
+        } else {
+            throw new IllegalArgumentException("0 or 1");
+        }
+        live.collision().setDebugDraw(enabled);
+        return "debugDraw=" + (enabled ? 1 : 0);
+    }
+
     private String eventsCommand(World bound, String[] args) {
         World live = requireWorld(bound);
         EventDispatcher dispatcher = live.events();
@@ -470,6 +503,8 @@ public final class DeveloperConsole {
         eventBinds.add(dispatcher.bind(EventType.LEVEL_UNLOADED, this::onLevelUnloaded));
         eventBinds.add(dispatcher.bind(EventType.ACTOR_SPAWNED, this::onActorSpawned));
         eventBinds.add(dispatcher.bind(EventType.ACTOR_DESTROYED, this::onActorDestroyed));
+        eventBinds.add(dispatcher.bind(EventType.BEGIN_OVERLAP, this::onBeginOverlap));
+        eventBinds.add(dispatcher.bind(EventType.END_OVERLAP, this::onEndOverlap));
     }
 
     private void unbindEngineEvents() {
@@ -500,6 +535,20 @@ public final class DeveloperConsole {
     private void onActorDestroyed(ActorEvent event) {
         Actor actor = event.actor();
         appendLog("event ActorDestroyed " + (actor == null ? "-" : actor.name()));
+    }
+
+    private void onBeginOverlap(OverlapEvent event) {
+        appendLog("event BeginOverlap " + overlapLabel(event));
+    }
+
+    private void onEndOverlap(OverlapEvent event) {
+        appendLog("event EndOverlap " + overlapLabel(event));
+    }
+
+    private static String overlapLabel(OverlapEvent event) {
+        String left = event.actor() == null ? "-" : event.actor().name();
+        String right = event.otherActor() == null ? "-" : event.otherActor().name();
+        return left + " vs " + right;
     }
 
     private String timersCommand(World bound, String[] args) {

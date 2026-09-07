@@ -191,6 +191,7 @@ public final class WidgetViewportTest {
         StringBuilder out = new StringBuilder();
         game.world().appendDump(out);
         assertTrue(out.toString().contains("world.widgets=1"));
+        assertTrue(out.toString().contains("world.overlaps=0"));
 
         viewport.find(HallGameMode.SAMPLE_WIDGET_NAME).hide();
         out.setLength(0);

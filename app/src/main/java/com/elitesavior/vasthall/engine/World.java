@@ -20,6 +20,7 @@ import java.util.Map;
  * {@link #events()} is the world's multicast event bus.
  * {@link #audio()} is the world's {@code UAudioDevice}-lite mixer.
  * {@link #viewport()} is the world's UMG-lite widget host.
+ * {@link #collision()} is the world's overlap registry.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -35,6 +36,7 @@ public final class World {
     private final EventDispatcher events = new EventDispatcher();
     private final AudioManager audio;
     private final WidgetViewport viewport = new WidgetViewport();
+    private final CollisionWorld collision;
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -49,6 +51,7 @@ public final class World {
     public World(AssetRegistry assets) {
         this.assets = assets == null ? new AssetRegistry() : assets;
         this.audio = new AudioManager(this.assets);
+        this.collision = new CollisionWorld(this);
     }
 
     public AssetRegistry assets() {
@@ -77,6 +80,10 @@ public final class World {
 
     public WidgetViewport viewport() {
         return viewport;
+    }
+
+    public CollisionWorld collision() {
+        return collision;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -287,6 +294,7 @@ public final class World {
         timers.clearAll();
         audio.stopAll();
         viewport.removeAll();
+        collision.sync();
     }
 
     public void tick(float deltaSeconds) {
@@ -383,6 +391,7 @@ public final class World {
         events.appendDump(out);
         audio.appendDump(out);
         viewport.appendDump(out);
+        collision.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())
@@ -434,6 +443,7 @@ public final class World {
             }
         }
         flushPendingLevelEvents();
+        collision.sync();
     }
 
     private void announceLevelLoaded(String name) {
