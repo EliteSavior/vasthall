@@ -57,7 +57,9 @@ public final class World {
         this.collision = new CollisionWorld(this);
         this.input = new InputSubsystem(this);
         this.playerController = new PlayerController(this.input);
-        this.input.addMappingContext(InputMappingContext.defaults());
+        InputMappingContext mapping = this.assets.findDataAsset(
+                AssetRegistry.DEFAULT_MAPPING_ID, InputMappingContext.class);
+        this.input.addMappingContext(mapping != null ? mapping : InputMappingContext.defaults());
     }
 
     public AssetRegistry assets() {

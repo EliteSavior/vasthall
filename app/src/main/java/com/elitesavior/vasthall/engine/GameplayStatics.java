@@ -115,6 +115,11 @@ public final class GameplayStatics {
         return requireWorld(world).assets().findDataAsset(idOrPath);
     }
 
+    public static <T extends DataAsset> T findDataAsset(
+            World world, String idOrPath, Class<T> type) {
+        return requireWorld(world).assets().findDataAsset(idOrPath, type);
+    }
+
     /** Hard DataAsset lookup. Missing names or wrong type throw. */
     public static <T extends DataAsset> T loadDataAsset(
             World world, String idOrPath, Class<T> type) {

@@ -1,7 +1,6 @@
 package com.elitesavior.vasthall.engine;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -134,9 +133,47 @@ public final class DataAssetTest {
         assertNull(registry.findDataAsset(AssetRegistry.HALL_BLADE_ID, InputMappingContext.class));
         try {
             registry.requireDataAsset(AssetRegistry.HALL_BLADE_ID, InputMappingContext.class);
-            fail("expected unknown data asset for wrong type");
+            fail("expected type mismatch");
         } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("type mismatch"));
             assertTrue(expected.getMessage().contains(AssetRegistry.HALL_BLADE_ID));
+            assertTrue(expected.getMessage().contains("WeaponDataAsset"));
         }
+    }
+
+    @Test
+    public void registerDataAssetInfersInputMappingKind() {
+        InputMappingContext extra = new InputMappingContext("Side");
+        extra.addAction(new InputAction("Sprint", InputValueType.DIGITAL));
+        Asset registered = registry.registerDataAsset(extra);
+        assertEquals("Side", registered.id());
+        assertEquals("/Game/Data/Side", registered.path());
+        assertEquals(AssetKind.INPUT_MAPPING, registered.kind());
+        assertSame(extra, registry.requireDataAsset("Side", InputMappingContext.class));
+    }
+
+    @Test
+    public void registerDataAssetRejectsNullAndWorldUsesRegisteredMapping() {
+        try {
+            registry.registerDataAsset(null);
+            fail("expected data asset");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("data asset"));
+        }
+        try {
+            registry.register("BadMap", "/Game/Input/Bad", AssetKind.INPUT_MAPPING, new MeshHandle("Bad"));
+            fail("expected INPUT_MAPPING payload check");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("InputMappingContext"));
+        }
+
+        World world = new World(AssetRegistry.withDemoAssets());
+        InputMappingContext registered = world.assets().requireDataAsset(
+                AssetRegistry.DEFAULT_MAPPING_ID, InputMappingContext.class);
+        assertSame(registered, world.input().mappingContexts().get(0));
+        assertSame(
+                registered,
+                GameplayStatics.findDataAsset(
+                        world, AssetRegistry.DEFAULT_MAPPING_ID, InputMappingContext.class));
     }
 }

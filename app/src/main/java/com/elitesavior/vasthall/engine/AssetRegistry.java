@@ -64,8 +64,9 @@ public final class AssetRegistry {
     }
 
     /**
-     * Register a {@link DataAsset} as {@link AssetKind#DATA} at
-     * {@code /Game/Data/{name}}.
+     * Register a {@link DataAsset} at {@code /Game/Data/{name}}.
+     * {@link InputMappingContext} rows use {@link AssetKind#INPUT_MAPPING};
+     * other subclasses use {@link AssetKind#DATA}.
      */
     public Asset registerDataAsset(DataAsset payload) {
         if (payload == null) {
@@ -75,7 +76,13 @@ public final class AssetRegistry {
     }
 
     public Asset registerDataAsset(String id, String path, DataAsset payload) {
-        return register(id, path, AssetKind.DATA, payload);
+        if (payload == null) {
+            throw new IllegalArgumentException("data asset");
+        }
+        AssetKind kind = payload instanceof InputMappingContext
+                ? AssetKind.INPUT_MAPPING
+                : AssetKind.DATA;
+        return register(id, path, kind, payload);
     }
 
     public DataAsset findDataAsset(String idOrPath) {
@@ -91,9 +98,17 @@ public final class AssetRegistry {
     }
 
     public <T extends DataAsset> T requireDataAsset(String idOrPath, Class<T> type) {
-        T data = findDataAsset(idOrPath, type);
-        if (data == null) {
+        Asset asset = find(idOrPath);
+        if (asset == null) {
             throw new IllegalArgumentException("unknown data asset: " + idOrPath);
+        }
+        T data = asset.as(type);
+        if (data == null) {
+            String actual = asset.payload() instanceof DataAsset
+                    ? ((DataAsset) asset.payload()).assetType()
+                    : asset.kind().name();
+            throw new IllegalArgumentException(
+                    "data asset type mismatch: " + idOrPath + " (" + actual + ")");
         }
         return data;
     }
@@ -127,6 +142,9 @@ public final class AssetRegistry {
         }
         if (kind == AssetKind.DATA && !(payload instanceof DataAsset)) {
             throw new IllegalArgumentException("DATA payload must be DataAsset");
+        }
+        if (kind == AssetKind.INPUT_MAPPING && !(payload instanceof InputMappingContext)) {
+            throw new IllegalArgumentException("INPUT_MAPPING payload must be InputMappingContext");
         }
         assertKeyAvailable(trimmedId, trimmedId);
         if (!trimmedPath.equals(trimmedId)) {

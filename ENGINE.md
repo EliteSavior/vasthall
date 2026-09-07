@@ -642,10 +642,10 @@ public final class ArenaStats extends DataAsset {
     }
 }
 
-World world = new World();
+World world = new World(AssetRegistry.withDemoAssets());
 AssetRegistry assets = world.assets();
 
-// 1. Create + register (or assets.registerDemoAssets() for HallBlade)
+// 1. Create + register (demo catalog already has HallBlade)
 WeaponDataAsset blade = new WeaponDataAsset("SideBlade", 10.0f, 0.2f, 6);
 assets.registerDataAsset("SideBlade", "/Game/Data/SideBlade", blade);
 assets.registerDataAsset(new ArenaStats("ArenaStats", 100.0f)); // id + /Game/Data/ArenaStats
@@ -654,10 +654,10 @@ assets.registerDataAsset(new ArenaStats("ArenaStats", 100.0f)); // id + /Game/Da
 WeaponDataAsset same = assets.requireDataAsset("SideBlade", WeaponDataAsset.class);
 DataAsset also = assets.findDataAsset("/Game/Data/SideBlade");
 GameplayStatics.loadDataAsset(world, "SideBlade", WeaponDataAsset.class);
-GameplayStatics.findDataAsset(world, "/Game/Data/HallBlade"); // demo row after withDemoAssets()
+GameplayStatics.findDataAsset(world, "/Game/Data/HallBlade", WeaponDataAsset.class);
 ```
 
-`register(..., AssetKind.DATA, payload)` requires a `DataAsset`. Soft lookup (`findDataAsset`) returns null when the name is missing or the type does not match; `requireDataAsset` / `GameplayStatics.loadDataAsset` throw `unknown data asset`. The demo catalog registers `HallBlade` (`/Game/Data/HallBlade`, kind `DATA`) and `DefaultMapping` (kind `INPUT_MAPPING`, still a DataAsset).
+`register(..., AssetKind.DATA, payload)` requires a `DataAsset`. `registerDataAsset` infers kind: `InputMappingContext` → `INPUT_MAPPING`, otherwise `DATA`. Soft lookup (`findDataAsset`) returns null when the name is missing or the type does not match; `requireDataAsset` / `GameplayStatics.loadDataAsset` throw `unknown data asset` or `data asset type mismatch`. The demo catalog registers `HallBlade` (`/Game/Data/HallBlade`, kind `DATA`) and `DefaultMapping` (kind `INPUT_MAPPING`, still a DataAsset). A World built with that catalog binds the registered DefaultMapping into `InputSubsystem` instead of loading a second copy.
 
 ## Developer console
 
