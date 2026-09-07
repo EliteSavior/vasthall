@@ -22,4 +22,8 @@
     <string name="copied">copied</string>
     <string name="log_cleared">log cleared</string>
     <string name="dbg_mark">DBG</string>
+    <string name="console">Console</string>
+    <string name="console_run">Run</string>
+    <string name="console_hint">command (help, actors, assets, load Hall)</string>
+    <string name="console_tilde">~</string>
 </resources>
