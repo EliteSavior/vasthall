@@ -219,8 +219,12 @@ public final class DeveloperConsole {
         for (Asset asset : assets) {
             out.append("id=").append(asset.id())
                     .append(" path=").append(asset.path())
-                    .append(" kind=").append(asset.kind().name())
-                    .append('\n');
+                    .append(" kind=").append(asset.kind().name());
+            DataAsset data = asset.as(DataAsset.class);
+            if (data != null) {
+                out.append(" type=").append(data.assetType());
+            }
+            out.append('\n');
         }
         return out.toString().trim();
     }

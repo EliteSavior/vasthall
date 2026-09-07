@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Collision / Input / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Collision / Input / DataAsset / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, a WidgetViewport, a CollisionWorld, and an InputSubsystem; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport; CollisionComponents are AABBs or spheres swept for Begin/End Overlap; named InputActions (Jump / Move / Look) are mapped from keys, touch, and gamepad stubs**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer. Collision is CPU overlap only — no PhysX, no rigid-body solve. Input is Enhanced Input–lite: bind named actions on `PlayerController` / `GameMode`, do not hardcode Activity key codes.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, a WidgetViewport, a CollisionWorld, and an InputSubsystem; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; DataAssets are named/typed data objects on that registry; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport; CollisionComponents are AABBs or spheres swept for Begin/End Overlap; named InputActions (Jump / Move / Look) are mapped from keys, touch, and gamepad stubs**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer. Collision is CPU overlap only — no PhysX, no rigid-body solve. Input is Enhanced Input–lite: bind named actions on `PlayerController` / `GameMode`, do not hardcode Activity key codes. DataAssets are `UDataAsset`-lite rows: subclass, register, load by id — not a Content Browser UI.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -27,13 +27,14 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `WidgetViewport` / `WidgetHost` | game viewport + AddToViewport | Named HUD slots; silent host or Android overlay |
 | `CollisionComponent` / `Aabb` | `UPrimitiveComponent` collision | Box or sphere on an actor; world AABB / sphere (rotation ignored) |
 | `CollisionWorld` / `OverlapEvent` | overlap queries + Begin/End Overlap | Sweep registry; enter/exit on the event bus |
-| `InputAction` / `InputMappingContext` | `UInputAction` / `UInputMappingContext` | Named Jump / Move / Look plus key/touch/gamepad maps |
+| `InputAction` / `InputMappingContext` | `UInputAction` / `UInputMappingContext` (`UDataAsset`) | Named Jump / Move / Look plus key/touch/gamepad maps |
 | `InputSubsystem` | Enhanced Input subsystem | Inject keys/axes; dispatch Started / Triggered / Completed |
 | `PlayerController` | thin `APlayerController` | Bind named actions without Activity key codes |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` / `getCollisionWorld` / `queryOverlaps` / `isOverlapping` / `overlapCount` / `getInputSubsystem` / `getPlayerController` / `bindAction` / `injectKey` / `injectAxis` / `actionValue` |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `findDataAsset` / `loadDataAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` / `getCollisionWorld` / `queryOverlaps` / `isOverlapping` / `overlapCount` / `getInputSubsystem` / `getPlayerController` / `bindAction` / `injectKey` / `injectAxis` / `actionValue` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
-| `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO`, `INPUT_MAPPING` |
+| `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO`, `INPUT_MAPPING`, `DATA` |
+| `DataAsset` / `WeaponDataAsset` | `UDataAsset` | Named/typed data object; HallBlade is the weapon-stats stub |
 | `MeshHandle` / `TextureHandle` / `AudioHandle` | stub `UObject`s | Named handles (no cook/decode yet) |
 | `DeveloperConsole` | `~` console | Register and run named commands |
 | `PlayerPawn` | default pawn | Java handle for the native player avatar (tick off) |
@@ -573,7 +574,8 @@ Paths look like classpath files or `/Game/...` object paths:
 | `MESH` | `HallMesh` | `/Game/Meshes/Hall` | `MeshHandle` stub for the native hall mesh |
 | `TEXTURE` | `HallBeaconTexture` | `/Game/Textures/HallBeacon` | `TextureHandle` stub |
 | `AUDIO` | `HallAmbience` | `/Game/Audio/HallAmbience` | `AudioHandle` stub |
-| `INPUT_MAPPING` | `DefaultMapping` | `/Game/Input/DefaultMapping` | `InputMappingContext` from `input/DefaultMapping.json` |
+| `INPUT_MAPPING` | `DefaultMapping` | `/Game/Input/DefaultMapping` | `InputMappingContext` DataAsset from `input/DefaultMapping.json` |
+| `DATA` | `HallBlade` | `/Game/Data/HallBlade` | `WeaponDataAsset` stub (`damage` / `fireInterval` / `magazineSize`) |
 
 ```java
 import com.elitesavior.vasthall.engine.Asset;
@@ -612,6 +614,50 @@ GameplayStatics.loadAsset(world, "Hall");            // throws unknown asset if 
 `World.registerLevel` is a convenience that indexes a `LEVEL` asset as `{name}` / `levels/{name}.json`. `World.loadLevel` and `openLevel` resolve that asset instead of keeping a second hardcoded catalog.
 
 Do world lookups in actor `beginPlay`, not in a constructor — the registry is on the `World`, and `owner().world()` is still null until `spawnActor` finishes. Hall's beacon does this for `/Game/Textures/HallBeacon`.
+
+## Create and load a DataAsset
+
+Unreal mental model: **`UDataAsset`**. A DataAsset is a named, typed data object — not an Actor, not a mesh. You subclass `DataAsset`, fill fields, register it on the `AssetRegistry`, then load it by id or path. `InputMappingContext` is already a DataAsset (`UInputMappingContext`). `WeaponDataAsset` is the Hall weapon-stats stub.
+
+There is no Content Browser UI in this version. Creating one is a subclass + `register` / `registerDataAsset` call.
+
+```java
+import com.elitesavior.vasthall.engine.AssetKind;
+import com.elitesavior.vasthall.engine.AssetRegistry;
+import com.elitesavior.vasthall.engine.DataAsset;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.WeaponDataAsset;
+import com.elitesavior.vasthall.engine.World;
+
+public final class ArenaStats extends DataAsset {
+    private final float maxHealth;
+
+    public ArenaStats(String name, float maxHealth) {
+        super(name);
+        this.maxHealth = maxHealth;
+    }
+
+    public float maxHealth() {
+        return maxHealth;
+    }
+}
+
+World world = new World();
+AssetRegistry assets = world.assets();
+
+// 1. Create + register (or assets.registerDemoAssets() for HallBlade)
+WeaponDataAsset blade = new WeaponDataAsset("SideBlade", 10.0f, 0.2f, 6);
+assets.registerDataAsset("SideBlade", "/Game/Data/SideBlade", blade);
+assets.registerDataAsset(new ArenaStats("ArenaStats", 100.0f)); // id + /Game/Data/ArenaStats
+
+// 2. Load by id or path
+WeaponDataAsset same = assets.requireDataAsset("SideBlade", WeaponDataAsset.class);
+DataAsset also = assets.findDataAsset("/Game/Data/SideBlade");
+GameplayStatics.loadDataAsset(world, "SideBlade", WeaponDataAsset.class);
+GameplayStatics.findDataAsset(world, "/Game/Data/HallBlade"); // demo row after withDemoAssets()
+```
+
+`register(..., AssetKind.DATA, payload)` requires a `DataAsset`. Soft lookup (`findDataAsset`) returns null when the name is missing or the type does not match; `requireDataAsset` / `GameplayStatics.loadDataAsset` throw `unknown data asset`. The demo catalog registers `HallBlade` (`/Game/Data/HallBlade`, kind `DATA`) and `DefaultMapping` (kind `INPUT_MAPPING`, still a DataAsset).
 
 ## Developer console
 
@@ -809,7 +855,7 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn` + box `CollisionComponent`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon` + box `CollisionComponent`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=5 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0 actions=3  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). `actions=3` is Jump / Move / Look on the default Input Mapping Context. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps` / `input`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=6 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0 actions=3  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). `actions=3` is Jump / Move / Look on the default Input Mapping Context. `assets=6` is Hall + mesh/texture/audio stubs + DefaultMapping + HallBlade. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps` / `input`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -825,12 +871,13 @@ world.widgets=1
 world.overlaps=0 debugDraw=0
 world.actions=3
 world.contexts=1
-world.assets=5
+world.assets=6
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
 asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
 asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO
-asset id=DefaultMapping path=/Game/Input/DefaultMapping kind=INPUT_MAPPING
+asset id=DefaultMapping path=/Game/Input/DefaultMapping kind=INPUT_MAPPING type=InputMappingContext
+asset id=HallBlade path=/Game/Data/HallBlade kind=DATA type=WeaponDataAsset
 level=Hall actors=2
 actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=2
   component class=TagComponent tick=0 tags=pawn
@@ -842,7 +889,7 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 
 ## Out of scope (this version)
 
-- Unreal Editor / Blueprint / a real Content Browser UI / Blueprint Event Dispatcher reflection
+- Unreal Editor / Blueprint / a real Content Browser UI / DataAsset editor / Blueprint Event Dispatcher reflection
 - A full in-editor output log / command history browser
 - Packaging / cooking / a packaging-pipeline rewrite
 - Networking / cloud saves

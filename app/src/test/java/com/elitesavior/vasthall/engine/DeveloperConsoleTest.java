@@ -104,7 +104,7 @@ public final class DeveloperConsoleTest {
     @Test
     public void assetsListsRegistry() {
         String out = console.exec("assets");
-        assertTrue(out.contains("assets=5"));
+        assertTrue(out.contains("assets=6"));
         assertTrue(out.contains("id=Hall"));
         assertTrue(out.contains("path=levels/Hall.json"));
         assertTrue(out.contains("kind=LEVEL"));
@@ -113,6 +113,9 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("id=HallAmbience"));
         assertTrue(out.contains("id=DefaultMapping"));
         assertTrue(out.contains("kind=INPUT_MAPPING"));
+        assertTrue(out.contains("id=HallBlade"));
+        assertTrue(out.contains("kind=DATA"));
+        assertTrue(out.contains("type=WeaponDataAsset"));
     }
 
     @Test
@@ -162,7 +165,7 @@ public final class DeveloperConsoleTest {
         String out = console.exec("stat");
         assertTrue(out.contains("actors=2"));
         assertTrue(out.contains("levels=1"));
-        assertTrue(out.contains("assets=5"));
+        assertTrue(out.contains("assets=6"));
         assertTrue(out.contains("frame=0"));
         assertTrue(out.contains("mode=-"));
         assertTrue(out.contains("timers=0"));
