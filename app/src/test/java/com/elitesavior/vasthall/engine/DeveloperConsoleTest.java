@@ -67,6 +67,9 @@ public final class DeveloperConsoleTest {
         assertTrue(all.contains("unload"));
         assertTrue(all.contains("open"));
         assertTrue(all.contains("help"));
+        assertTrue(all.contains("settimer"));
+        assertTrue(all.contains("cleartimer"));
+        assertTrue(all.contains("timers"));
         String one = console.exec("help actors");
         assertTrue(one.toLowerCase().contains("actor"));
         assertEquals(console.helpText("actors"), one.trim());
@@ -145,6 +148,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("assets=4"));
         assertTrue(out.contains("frame=0"));
         assertTrue(out.contains("mode=-"));
+        assertTrue(out.contains("timers=0"));
     }
 
     @Test

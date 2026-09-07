@@ -33,6 +33,7 @@ public final class GameInstanceTest {
         assertSame(game.world().assets(), game.assets());
         assertSame(game.world(), game.console().world());
         assertSame(game, game.world().gameInstance());
+        assertSame(game.timerManager(), game.world().timerManager());
         assertEquals(4, game.assets().size());
         assertNull(game.gameMode());
     }
@@ -212,6 +213,7 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("game.mode=HallGameMode pawn=PlayerPawn started=1"));
         assertTrue(dump.contains("world.actors=2"));
         assertTrue(dump.contains("world.levels=1"));
+        assertTrue(dump.contains("world.timers=1"));
     }
 
     @Test

@@ -10,6 +10,8 @@ package com.elitesavior.vasthall.engine;
  * world is owned by a {@link GameInstance}, open/unload go through it so
  * {@link GameMode} is installed or torn down. {@link #findAsset} /
  * {@link #loadAsset} look up the world's {@link AssetRegistry}.
+ * {@link #getTimerManager} / {@link #setTimer} reach the world's
+ * {@link TimerManager}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -52,6 +54,19 @@ public final class GameplayStatics {
 
     public static GameMode getGameMode(World world) {
         return requireWorld(world).gameMode();
+    }
+
+    public static TimerManager getTimerManager(World world) {
+        return requireWorld(world).timerManager();
+    }
+
+    public static TimerHandle setTimer(
+            World world, Runnable callback, float rateSeconds, boolean looping) {
+        return getTimerManager(world).setTimer(callback, rateSeconds, looping);
+    }
+
+    public static void clearTimer(World world, TimerHandle handle) {
+        getTimerManager(world).clearTimer(handle);
     }
 
     /** Soft lookup. Missing names return null. */

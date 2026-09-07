@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors and a TimerManager; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -8,8 +8,9 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
-| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console across travel |
-| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook |
+| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager across travel |
+| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer demo |
+| `TimerManager` / `TimerHandle` | `FTimerManager` / `FTimerHandle` | SetTimer by delay, loop, clear, pause/unpause |
 | `World` | `UWorld` | Spawn, destroy, tick, query, stream levels |
 | `Actor` | `AActor` | Gameplay object with a transform |
 | `ActorComponent` | `UActorComponent` | Behavior attached to an actor |
@@ -18,7 +19,7 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Transform` | `FTransform` | Location, rotator (pitch/yaw/roll degrees), scale |
 | `LevelDefinition` | map / streaming-level asset | Named list of actor templates |
 | `Level` | loaded `ULevel` | Actors currently owned by one loaded map |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `findAsset` / `loadAsset` |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `findAsset` / `loadAsset` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
@@ -34,7 +35,7 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names, in order:
 
 1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
-2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
 3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
 4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
 
@@ -50,6 +51,7 @@ GameplayStatics.openLevel(game, "Hall"); // same path; also used by the console
 game.world();                           // same World after travel
 game.assets();                          // same AssetRegistry
 game.console();                         // same DeveloperConsole
+game.timerManager();                    // same TimerManager (on the World)
 game.gameMode();                        // HallGameMode for Hall.json
 ```
 
@@ -153,7 +155,56 @@ world.registerLevel(LevelDefinition.named("Arena").gameMode("ArenaGameMode"));
 game.openLevel("Arena");
 ```
 
-`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. HUD / PlayerController / GameState are out of scope this version.
+`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. `HallGameMode.startPlay` also sets a one-shot `TimerManager` hook after `HallGameMode.DELAYED_START_SECONDS` (0.25s) — the sample delayed-start. HUD / PlayerController / GameState are out of scope this version.
+
+## TimerManager
+
+Unreal mental model: `GetWorld()->GetTimerManager().SetTimer(...)`. Java timers are **tick-driven**: `World.tick(dt)` subtracts `dt` from remaining time and fires due callbacks on the same thread. There is no extra async executor.
+
+```java
+import com.elitesavior.vasthall.engine.Actor;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.TimerHandle;
+import com.elitesavior.vasthall.engine.TimerManager;
+import com.elitesavior.vasthall.engine.World;
+
+World world = game.world();
+TimerManager timers = world.timerManager();          // same as game.timerManager()
+TimerHandle once = timers.setTimer(() -> { /* log */ }, 1.0f, false);
+TimerHandle loop = timers.setTimer(this::pulse, 0.5f, true);
+timers.pauseTimer(loop);
+timers.unPauseTimer(loop);
+timers.clearTimer(once);
+
+// Actor / component helpers auto-clear on endPlay / onDetach
+Actor actor = world.findActor("HallBeacon");
+TimerHandle owned = actor.setTimer(() -> actor.setName("tock"), 2.0f, false);
+actor.clearTimer(owned);
+
+GameplayStatics.setTimer(world, () -> {}, 0.25f, false);
+GameplayStatics.getTimerManager(world);
+```
+
+| Call | What it does |
+| --- | --- |
+| `setTimer(callback, rate, looping)` | Fire after `rate` seconds; looping restarts at the same rate |
+| `clearTimer(handle)` | Cancel. Null / already-invalid handles are ignored |
+| `pauseTimer` / `unPauseTimer` | Freeze or resume remaining time |
+| `isTimerActive` / `isTimerPaused` | Active means present and not paused |
+| `getTimerRemaining` / `getTimerRate` | Seconds, or `-1` if the handle is not live |
+| `clearAll` | Invalidate every handle (also `World.destroyAll`) |
+
+Rate must be `> 0`. A large `dt` can fire a looping timer more than once in one tick (capped). Actor- and component-owned timers are cleared when the actor is destroyed or the component is detached. World-level timers survive `openLevel` (same World); `HallGameMode.endPlay` clears its delayed-start handle on travel.
+
+Console demo (fossDebug `~`):
+
+```
+settimer 1 once hello
+timers
+cleartimer
+```
+
+After about one second of play (menu closed so the world ticks), the console log gets `timer fired id=… hello`. `HallGameMode` also schedules its 0.25s delayed-start hook on `open Hall`.
 
 ## Register and load an asset
 
@@ -221,6 +272,8 @@ console.exec("assets");
 console.exec("load Hall");
 console.exec("unload Hall");
 console.exec("open Hall");
+console.exec("settimer 1 once hello");
+console.exec("timers");
 console.register("ping", "Echo ping", (bound, args) -> "pong");
 ```
 
@@ -232,7 +285,10 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=… mode=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=…` |
+| `settimer <seconds> [once\|loop] [message]` | `SetTimer` — delayed console log |
+| `cleartimer [id]` | `ClearTimer` (last handle if id omitted) |
+| `timers` | List active TimerManager entries |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -324,7 +380,7 @@ Hall sample: `PlayerPawn` ships a `TagComponent("pawn")`, `HallBeaconActor` a `T
 `VastHallActivity` ticks the world from the vsync `Choreographer` callback while the menu is closed:
 
 ```java
-world.tick(deltaSeconds);
+world.tick(deltaSeconds);  // TimerManager first, then actors
 ```
 
 Override on your subclass:
@@ -340,7 +396,7 @@ public class SpinningProp extends Actor {
 
 `setActorTickEnabled(false)` keeps the actor in the world but skips `tick` **and** its components. `PlayerPawn` uses that because `libvasthall.so` still owns walk/look.
 
-Pause / menu: the activity skips `world.tick` while overlays are open. Actors stay in the world; they just stop advancing.
+Pause / menu: the activity skips `world.tick` while overlays are open. Actors and timers stay in the world; they just stop advancing.
 
 ## Destroy and query
 
@@ -365,7 +421,7 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `load Hall`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -373,6 +429,7 @@ game.mode=HallGameMode pawn=PlayerPawn started=1
 world.actors=2
 world.frame=…
 world.levels=1
+world.timers=1
 world.assets=4
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
