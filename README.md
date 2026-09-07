@@ -3,12 +3,12 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Source version: `0.25.0` (Gameplay events/delegates + TimerManager on GameInstance/World + GameMode + Scene/Actor/Level/Component/Asset/Console; see [ENGINE.md](ENGINE.md))
+- Source version: `0.26.0` (SaveGame slots + Gameplay events/delegates + TimerManager on GameInstance/World + GameMode + Scene/Actor/Level/Component/Asset/Console; see [ENGINE.md](ENGINE.md))
 - Last published APK: tag `v0.16-hall`, file `VastHall-v0-foss.apk` (269007 bytes, md5 `2621ce8ad3f67372a687c594abae88c4`)
 
 ## Download
 
-The last uploaded binary is still [v0.16-hall](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall). This branch is the 0.25 source; it needs a signed `assembleFoss` build before a new release asset exists.
+The last uploaded binary is still [v0.16-hall](https://github.com/EliteSavior/vasthall/releases/tag/v0.16-hall). This branch is the 0.26 source; it needs a signed `assembleFoss` build before a new release asset exists.
 
 Direct (v0.16): https://github.com/EliteSavior/vasthall/releases/download/v0.16-hall/VastHall-v0-foss.apk
 
@@ -28,6 +28,6 @@ adb uninstall com.elitesavior.vasthall
 adb install app/build/outputs/apk/foss/debug/app-foss-debug.apk
 ```
 
-Play start creates a `GameInstance` (owns World, Asset Registry, Console, TimerManager, EventDispatcher), `init()`s it, then `openLevel("Hall")` from `levels/Hall.json` which installs `HallGameMode`: a `PlayerPawn` (Java handle for the native avatar) and a ticking `HallBeacon` that resolves `/Game/Textures/HallBeacon`. Both carry a `TagComponent`. HallGameMode also sets a 0.25s delayed-start timer and binds actor-spawn / level-unload events. The top-center `SCENE Hall mode=HallGameMode actors=… comps=… assets=… timers=… events=…` line is the GameInstance/GameMode/TimerManager/Event/Scene layer; it is not a control change.
+Play start creates a `GameInstance` (owns World, Asset Registry, Console, TimerManager, EventDispatcher, SaveGameSystem), `init()`s it, then `openLevel("Hall")` from `levels/Hall.json` which installs `HallGameMode`: a `PlayerPawn` (Java handle for the native avatar) and a ticking `HallBeacon` that resolves `/Game/Textures/HallBeacon`. Both carry a `TagComponent`. HallGameMode also sets a 0.25s delayed-start timer and binds actor-spawn / level-unload events. Save slots live under `filesDir/SaveGames`. The top-center `SCENE Hall mode=HallGameMode actors=… comps=… assets=… timers=… events=… saves=…` line is the GameInstance/GameMode/TimerManager/Event/SaveGame/Scene layer; it is not a control change.
 
-fossDebug builds show a `~` button on the play HUD (and Menu → Debug → Console). Type `help`, `actors`, `assets`, `settimer 1 once hello`, `timers`, `events`, `load Hall`, `unload Hall`, or `open Hall`. fossRelease omits the overlay (debug/release source-set gate).
+fossDebug builds show a `~` button on the play HUD (and Menu → Debug → Console). Type `help`, `actors`, `assets`, `settimer 1 once hello`, `timers`, `events`, `SaveGame Slot0`, `LoadGame Slot0`, `load Hall`, `unload Hall`, or `open Hall`. fossRelease omits the overlay (debug/release source-set gate).

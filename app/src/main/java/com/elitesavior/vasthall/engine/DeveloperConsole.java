@@ -152,6 +152,8 @@ public final class DeveloperConsole {
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
         register("events", "List EventDispatcher listener counts", this::eventsCommand);
+        register("savegame", "SaveGame <slot>", this::saveGameCommand);
+        register("loadgame", "LoadGame <slot>", this::loadGameCommand);
         bindEngineEvents();
     }
 
@@ -237,13 +239,15 @@ public final class DeveloperConsole {
         String mode = live.gameMode() == null
                 ? "-"
                 : live.gameMode().getClass().getSimpleName();
+        int saves = live.gameInstance() == null ? 0 : live.gameInstance().saveSlots().size();
         return "actors=" + live.actorCount()
                 + " levels=" + live.loadedLevels().size()
                 + " assets=" + live.assets().size()
                 + " frame=" + live.frameCount()
                 + " mode=" + mode
                 + " timers=" + live.timerManager().timerCount()
-                + " events=" + live.events().listenerCount();
+                + " events=" + live.events().listenerCount()
+                + " saves=" + saves;
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -306,6 +310,31 @@ public final class DeveloperConsole {
             lastTimer = null;
         }
         return "cleared " + id;
+    }
+
+    private String saveGameCommand(World bound, String[] args) {
+        GameInstance game = requireGame(bound);
+        String slot = requireSlotName(args);
+        if (!game.saveGameToSlot(slot)) {
+            throw new IllegalStateException("save failed");
+        }
+        SaveGame save = game.loadSaveGameObject(slot);
+        String level = save == null || save.levelName().isEmpty() ? "-" : save.levelName();
+        int actors = save == null ? 0 : save.actors().size();
+        return "saved " + slot + " level=" + level + " actors=" + actors;
+    }
+
+    private String loadGameCommand(World bound, String[] args) {
+        GameInstance game = requireGame(bound);
+        String slot = requireSlotName(args);
+        if (!game.doesSaveGameExist(slot)) {
+            throw new IllegalArgumentException("no save: " + slot);
+        }
+        if (!game.loadGameFromSlot(slot)) {
+            throw new IllegalStateException("load failed");
+        }
+        String level = currentLevelName(game.world());
+        return "loaded " + slot + " level=" + level + " actors=" + game.world().actorCount();
     }
 
     private String eventsCommand(World bound, String[] args) {
@@ -394,6 +423,27 @@ public final class DeveloperConsole {
             throw new IllegalArgumentException("no world");
         }
         return world;
+    }
+
+    private static GameInstance requireGame(World world) {
+        World live = requireWorld(world);
+        GameInstance game = live.gameInstance();
+        if (game == null) {
+            throw new IllegalArgumentException("no game instance");
+        }
+        return game;
+    }
+
+    private static String requireSlotName(String[] args) {
+        if (args == null || args.length == 0 || args[0] == null || args[0].isEmpty()) {
+            throw new IllegalArgumentException("slot name");
+        }
+        return args[0];
+    }
+
+    private static String currentLevelName(World world) {
+        List<Level> levels = world.loadedLevels();
+        return levels.isEmpty() ? "-" : levels.get(0).name();
     }
 
     private static String requireLevelName(String[] args) {

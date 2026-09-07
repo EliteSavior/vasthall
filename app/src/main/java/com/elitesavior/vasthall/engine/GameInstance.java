@@ -1,10 +1,13 @@
 package com.elitesavior.vasthall.engine;
 
+import java.io.File;
+import java.util.List;
+
 /**
  * Long-lived game singleton. Unreal mental model: {@code UGameInstance} —
  * owns the {@link World}, {@link AssetRegistry}, {@link DeveloperConsole},
- * that world's {@link TimerManager}, and {@link EventDispatcher} across
- * level travel.
+ * that world's {@link TimerManager}, {@link EventDispatcher}, and
+ * {@link SaveGameSystem} across level travel.
  * {@link GameMode} is created per {@link #openLevel}.
  *
  * <p>Startup flow: {@code Init} → {@link #init()} → {@link #openLevel(String)}
@@ -17,6 +20,7 @@ public final class GameInstance {
     private final AssetRegistry assets;
     private final World world;
     private final DeveloperConsole console;
+    private final SaveGameSystem saves = new SaveGameSystem();
     private Class<? extends GameMode> defaultGameModeClass = HallGameMode.class;
     private GameMode gameMode;
     private boolean initialized;
@@ -63,6 +67,62 @@ public final class GameInstance {
 
     public EventDispatcher events() {
         return world.events();
+    }
+
+    public SaveGameSystem saves() {
+        return saves;
+    }
+
+    /** Tests and the activity inject the slot directory (no device default). */
+    public void setSaveDirectory(File directory) {
+        saves.setDirectory(directory);
+    }
+
+    public File saveDirectory() {
+        return saves.directory();
+    }
+
+    /** {@code CreateSaveGameObject} — snapshot the live world. */
+    public SaveGame createSaveGame() {
+        return SaveGame.capture(world);
+    }
+
+    /** Capture the world and write {@code <slot>.sav}. Overwrites an existing slot. */
+    public boolean saveGameToSlot(String slot) {
+        return saves.saveToSlot(slot, createSaveGame());
+    }
+
+    public boolean saveGameToSlot(SaveGame save, String slot) {
+        return saves.saveToSlot(slot, save);
+    }
+
+    /** Read the slot without applying it. Null if the slot is missing or invalid. */
+    public SaveGame loadSaveGameObject(String slot) {
+        return saves.loadFromSlot(slot);
+    }
+
+    /**
+     * {@code LoadGameFromSlot}: read, {@code openLevel} the saved map, restore
+     * matching actor fields. False if the slot does not exist.
+     */
+    public boolean loadGameFromSlot(String slot) {
+        SaveGame save = saves.loadFromSlot(slot);
+        if (save == null) {
+            return false;
+        }
+        return save.apply(this);
+    }
+
+    public boolean doesSaveGameExist(String slot) {
+        return saves.doesSlotExist(slot);
+    }
+
+    public boolean deleteGameInSlot(String slot) {
+        return saves.deleteSlot(slot);
+    }
+
+    public List<String> saveSlots() {
+        return saves.slots();
     }
 
     public GameMode gameMode() {
