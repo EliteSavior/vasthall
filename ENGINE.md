@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Collision / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, and a WidgetViewport; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, a WidgetViewport, and a CollisionWorld; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport; CollisionComponents are AABBs or spheres swept for Begin/End Overlap**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer. Collision is CPU overlap only — no PhysX, no rigid-body solve.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -25,7 +25,9 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `AudioManager` / `AudioDevice` | `UAudioDevice` + `PlaySound2D` | Play / stop registered `AUDIO` by id; master volume; silent foss device |
 | `Widget` / `TextWidget` | `UUserWidget` / `UTextBlock` | Create, show, hide, remove-from-parent |
 | `WidgetViewport` / `WidgetHost` | game viewport + AddToViewport | Named HUD slots; silent host or Android overlay |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` |
+| `CollisionComponent` / `Aabb` | `UPrimitiveComponent` collision | Box or sphere on an actor; world AABB / sphere (rotation ignored) |
+| `CollisionWorld` / `OverlapEvent` | overlap queries + Begin/End Overlap | Sweep registry; enter/exit on the event bus |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` / `getCollisionWorld` / `queryOverlaps` / `isOverlapping` / `overlapCount` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
@@ -41,7 +43,7 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names, in order:
 
 1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
-2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, `WidgetViewport`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, `WidgetViewport`, `CollisionWorld`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
 3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
 4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
 
@@ -61,6 +63,7 @@ game.timerManager();                    // same TimerManager (on the World)
 game.events();                          // same EventDispatcher (on the World)
 game.audio();                           // same AudioManager (on the World)
 game.viewport();                        // same WidgetViewport (on the World)
+game.collision();                       // same CollisionWorld (on the World)
 game.saves();                           // same SaveGameSystem (slot directory)
 game.gameMode();                        // HallGameMode for Hall.json
 ```
@@ -255,10 +258,12 @@ GameplayStatics.getEventDispatcher(world);
 | `EventType.LEVEL_UNLOADED` | After `unloadLevel` destroys those actors and drops the `Level` |
 | `EventType.ACTOR_SPAWNED` | After `beginPlay` (deferred to end-of-tick if you spawn during `tick`) |
 | `EventType.ACTOR_DESTROYED` | After `endPlay`, before the actor detaches |
+| `EventType.BEGIN_OVERLAP` | After the tick flush, when two `CollisionComponent`s first overlap |
+| `EventType.END_OVERLAP` | After the tick flush (or destroy), when that pair no longer overlaps |
 
 Already-loaded `loadLevel` and not-loaded `unloadLevel` do not broadcast. Bind order is preserved. A listener bound during broadcast runs on the **next** broadcast. Unbind during broadcast is safe. Null / already-invalid / foreign handles are ignored (the handle stays valid if it was not on that delegate). If you `loadLevel` / `unloadLevel` during `tick`, the level event waits until that frame's pending spawn/destroy flush so `ActorSpawned` / `ActorDestroyed` still precede it. Level templates apply `name` / `tickEnabled` before `ActorSpawned`.
 
-`HallGameMode` binds `ActorSpawned` / `LevelUnloaded` in `startPlay` (so it hears later spawns and streaming unloads, not the opening Hall actors — those fire before the mode exists) and unbinds in `endPlay`. The console binds all four engine hooks at builtin registration and logs `event LevelLoaded Hall`, `event ActorSpawned PlayerPawn`, …
+`HallGameMode` binds `ActorSpawned` / `LevelUnloaded` in `startPlay` (so it hears later spawns and streaming unloads, not the opening Hall actors — those fire before the mode exists) and unbinds in `endPlay`. The console binds the six engine hooks at builtin registration and logs `event LevelLoaded Hall`, `event ActorSpawned PlayerPawn`, `event BeginOverlap A vs B`, …
 
 Console demo (fossDebug `~`):
 
@@ -416,6 +421,66 @@ RemoveFromParent Hint
 
 Names are case-insensitive (`createwidget` / `addtoviewport` / `hidewidget` / `showwidget` / `removefromparent`). Missing names return `error: unknown widget: …`.
 
+## Collision / overlaps
+
+Unreal mental model: a `UPrimitiveComponent` with **GenerateOverlapEvents** — not a PhysX scene. Java `CollisionComponent`s are boxes or spheres on actors. `CollisionWorld` (on the `World`) sweeps them after each spawn/destroy flush and broadcasts **one** `BeginOverlap` / `EndOverlap` per pair on the gameplay event bus. Rotation is ignored (world AABB / sphere). Same-actor components do not pair. Touching faces count as overlap.
+
+```java
+import com.elitesavior.vasthall.engine.CollisionComponent;
+import com.elitesavior.vasthall.engine.CollisionWorld;
+import com.elitesavior.vasthall.engine.EventType;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.OverlapEvent;
+import com.elitesavior.vasthall.engine.World;
+
+World world = game.world();
+CollisionWorld collision = world.collision();        // same as game.collision()
+
+Actor crate = world.spawnActor(Actor.class, Transform.at(0, 0, 0));
+crate.addComponent(new CollisionComponent().setBoxExtent(0.5f, 0.5f, 0.5f));
+Actor ball = world.spawnActor(Actor.class, Transform.at(0.4f, 0, 0));
+ball.addComponent(new CollisionComponent().setSphereRadius(0.4f));
+
+world.events().bind(EventType.BEGIN_OVERLAP, (OverlapEvent e) -> {
+    // e.actor(), e.otherActor(), e.component(), e.otherComponent()
+});
+world.events().bind(EventType.END_OVERLAP, e -> { /* pair left or was destroyed */ });
+
+world.tick(0.016f);
+collision.overlapCount();
+collision.queryOverlaps(crate.getComponent(CollisionComponent.class));
+collision.isOverlapping(
+        crate.getComponent(CollisionComponent.class),
+        ball.getComponent(CollisionComponent.class));
+
+GameplayStatics.getCollisionWorld(world);
+GameplayStatics.queryOverlaps(world, crate.getComponent(CollisionComponent.class));
+GameplayStatics.overlapCount(world);
+```
+
+| Call | What it does |
+| --- | --- |
+| `setBoxExtent(x,y,z)` | Half-extents; switches shape to `BOX`. Absorbed; NaN/Inf throw |
+| `setSphereRadius(r)` | Switches shape to `SPHERE`. Absorbed; NaN/Inf throw |
+| `setRelativeLocation` | Local offset; scaled with the actor |
+| `setGenerateOverlapEvents` | False: still queryable, no begin/end |
+| `setCollisionEnabled` | False: ignored by sweep and queries |
+| `worldBounds` / `worldCenter` | Actor location + relative × scale (rotation ignored) |
+| `queryOverlaps` | Geometric hits (enabled shapes, other actors) |
+| `isOverlapping` / `overlapCount` | Tracked event pairs after the last sync |
+| `setDebugDraw` | Stub flag only — no renderer hook |
+
+`PlayerPawn` ships a `0.4 × 0.9 × 0.4` box; `HallBeaconActor` a `0.3` cube. They do **not** overlap at Hall spawn. Tick is off on the component — the world sweeps. `World.destroyAll` ends leftover pairs.
+
+Console demo (fossDebug `~`):
+
+```
+ListOverlaps
+DebugDrawOverlaps 1
+```
+
+Names are case-insensitive (`listoverlaps` / `overlaps` / `debugdrawoverlaps`). `DebugDrawOverlaps` is a dump/stat stub (`debugDraw=0|1`); nothing is drawn in the native hall.
+
 ## Register and load an asset
 
 Unreal Content Browser mental model, without an editor: every piece of content has a **short id** and a **path**. Register once on the world's `AssetRegistry`. Look up later by either key. Missing names return null (`find`) or throw `unknown asset` (`require` / `GameplayStatics.loadAsset`).
@@ -494,6 +559,8 @@ console.exec("StopSound HallAmbience");
 console.exec("CreateWidget Text Hint Hello");
 console.exec("AddToViewport Hint");
 console.exec("widgets");
+console.exec("ListOverlaps");
+console.exec("DebugDrawOverlaps 1");
 console.register("ping", "Echo ping", (bound, args) -> "pong");
 ```
 
@@ -505,7 +572,7 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=… widgets=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=… widgets=… overlaps=…` |
 | `settimer <seconds> [once\|loop] [message]` | `SetTimer` — delayed console log |
 | `cleartimer [id]` | `ClearTimer` (last handle if id omitted) |
 | `timers` | List active TimerManager entries |
@@ -521,6 +588,8 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `hidewidget <name>` / `showwidget <name>` | `SetVisibility` Hidden / Visible |
 | `removefromparent <name>` (`RemoveFromParent`) | Drop the viewport slot |
 | `widgets` | List WidgetViewport names / visibility |
+| `listoverlaps` (`overlaps`) | List current CollisionWorld pairs |
+| `debugdrawoverlaps <0\|1>` | Stub debug-draw flag |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -562,6 +631,7 @@ Actors own components (Unreal `CreateDefaultSubobject` / `AddComponent`). Lifecy
 
 ```java
 import com.elitesavior.vasthall.engine.Actor;
+import com.elitesavior.vasthall.engine.CollisionComponent;
 import com.elitesavior.vasthall.engine.MovementComponent;
 import com.elitesavior.vasthall.engine.TagComponent;
 import com.elitesavior.vasthall.engine.Transform;
@@ -579,6 +649,9 @@ move.setVelocity(0.0f, 0.0f, -1.0f);   // slide toward -Z each tick
 
 crate.getComponent(TagComponent.class);
 crate.removeComponent(move);           // onDetach; crate stays in the world
+
+CollisionComponent hit = crate.addComponent(new CollisionComponent());
+hit.setBoxExtent(0.5f, 0.5f, 0.5f);    // world AABB from actor location
 ```
 
 Write your own by subclassing `ActorComponent`:
@@ -605,14 +678,14 @@ Rules that match this engine:
 - Add/remove during `tick` is safe: the new component ticks next frame; a removed one does not finish this frame.
 - `world.destroyActor(actor)` (and `unloadLevel`) calls actor `endPlay`, then `onDetach` on every remaining component.
 
-Hall sample: `PlayerPawn` ships a `TagComponent("pawn")`, `HallBeaconActor` a `TagComponent("beacon")`. Beacon bob/yaw stays in the actor `tick`, not a movement component.
+Hall sample: `PlayerPawn` ships a `TagComponent("pawn")` and a `CollisionComponent` box, `HallBeaconActor` a `TagComponent("beacon")` and a smaller box. Beacon bob/yaw stays in the actor `tick`, not a movement component. The two Hall boxes do not overlap.
 
 ## Tick
 
 `VastHallActivity` ticks the world from the vsync `Choreographer` callback while the menu is closed:
 
 ```java
-world.tick(deltaSeconds);  // TimerManager first, then actors
+world.tick(deltaSeconds);  // TimerManager, actors, flush, then CollisionWorld.sync
 ```
 
 Override on your subclass:
@@ -650,10 +723,10 @@ Destroy during `tick` is deferred until that frame finishes, so a ticking actor 
 
 On play start the activity creates a `GameInstance`, `init()`s it, and `openLevel("Hall")`, which installs `HallGameMode` and spawns:
 
-- `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
-- `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
+- `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn` + box `CollisionComponent`)
+- `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon` + box `CollisionComponent`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1 events=6 saves=0 audio=0 widgets=1  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=6` is the console's four engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=4 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -663,19 +736,22 @@ world.actors=2
 world.frame=…
 world.levels=1
 world.timers=1
-world.events=6
+world.events=8
 world.audio=0
 world.widgets=1
+world.overlaps=0 debugDraw=0
 world.assets=4
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
 asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
 asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO
 level=Hall actors=2
-actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=1
+actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=2
   component class=TagComponent tick=0 tags=pawn
-actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.5xxx,4.0000 … components=1
+  component class=CollisionComponent tick=0 shape=box on=1 events=1 …
+actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.5xxx,4.0000 … components=2
   component class=TagComponent tick=0 tags=beacon
+  component class=CollisionComponent tick=0 shape=box on=1 events=1 …
 ```
 
 ## Out of scope (this version)
@@ -693,3 +769,6 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 - A `TransformComponent` (transform is already on `Actor`)
 - Spatial / 3D audio, attenuation, FMOD, MediaPlayer / SoundPool hardware decode
 - A full UMG designer / Widget Blueprint editor / button hit-test stack
+- PhysX / Chaos / rigid-body solve / traces / hit events / swept moves
+- Collision channels / profiles / object types
+- Native debug-line draw for `DebugDrawOverlaps`

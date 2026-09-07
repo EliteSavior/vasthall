@@ -179,8 +179,10 @@ public final class ComponentTest {
 
         assertTrue(pawn.getComponent(TagComponent.class).hasTag("pawn"));
         assertTrue(beacon.getComponent(TagComponent.class).hasTag("beacon"));
-        assertEquals(1, pawn.componentCount());
-        assertEquals(1, beacon.componentCount());
+        assertEquals(2, pawn.componentCount());
+        assertEquals(2, beacon.componentCount());
+        assertNotNull(pawn.getComponent(CollisionComponent.class));
+        assertNotNull(beacon.getComponent(CollisionComponent.class));
     }
 
     @Test
@@ -210,9 +212,10 @@ public final class ComponentTest {
         StringBuilder out = new StringBuilder();
         world.appendDump(out);
         String dump = out.toString();
-        assertTrue(dump.contains("components=2"));
+        assertTrue(dump.contains("components=3"));
         assertTrue(dump.contains("component class=TagComponent"));
         assertTrue(dump.contains("tags=beacon"));
+        assertTrue(dump.contains("component class=CollisionComponent"));
         assertTrue(dump.contains("component class=MovementComponent"));
         assertTrue(dump.contains("vel=1.0000,0.0000,0.0000"));
     }

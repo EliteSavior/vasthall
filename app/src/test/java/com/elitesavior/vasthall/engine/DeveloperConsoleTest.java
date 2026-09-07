@@ -83,6 +83,8 @@ public final class DeveloperConsoleTest {
         assertTrue(all.contains("showwidget"));
         assertTrue(all.contains("removefromparent"));
         assertTrue(all.contains("widgets"));
+        assertTrue(all.contains("listoverlaps"));
+        assertTrue(all.contains("debugdrawoverlaps"));
         String one = console.exec("help actors");
         assertTrue(one.toLowerCase().contains("actor"));
         assertEquals(console.helpText("actors"), one.trim());
@@ -165,6 +167,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("saves=0"));
         assertTrue(out.contains("audio=0"));
         assertTrue(out.contains("widgets=0"));
+        assertTrue(out.contains("overlaps=0"));
     }
 
     @Test

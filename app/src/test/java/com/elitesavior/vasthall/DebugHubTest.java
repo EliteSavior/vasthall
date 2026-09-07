@@ -141,8 +141,9 @@ public final class DebugHubTest {
         assertTrue(dump.contains("name=PlayerPawn"));
         assertTrue(dump.contains("name=HallBeacon"));
         assertTrue(dump.contains("class=HallBeaconActor"));
-        assertTrue(dump.contains("components=1"));
+        assertTrue(dump.contains("components=2"));
         assertTrue(dump.contains("component class=TagComponent"));
+        assertTrue(dump.contains("component class=CollisionComponent"));
         assertTrue(dump.contains("tags=pawn"));
         assertTrue(dump.contains("tags=beacon"));
     }

@@ -141,7 +141,7 @@ public final class GameplayEventsTest {
         assertNotNull(game.events());
         assertSame(game.world().events(), game.events());
         assertSame(game.events(), GameplayStatics.getEventDispatcher(game.world()));
-        assertEquals(4, game.events().listenerCount());
+        assertEquals(6, game.events().listenerCount());
     }
 
     @Test
@@ -153,7 +153,7 @@ public final class GameplayEventsTest {
         HallGameMode mode = (HallGameMode) game.gameMode();
         assertEquals(0, mode.actorSpawnedCount());
         assertEquals(0, mode.levelUnloadedCount());
-        assertEquals(6, game.events().listenerCount());
+        assertEquals(8, game.events().listenerCount());
 
         Actor extra = game.world().spawnActor(Actor.class);
         extra.setName("Extra");
@@ -167,7 +167,7 @@ public final class GameplayEventsTest {
 
         game.unloadLevel("Hall");
         assertEquals(2, mode.levelUnloadedCount());
-        assertEquals(4, game.events().listenerCount());
+        assertEquals(6, game.events().listenerCount());
 
         int heard = mode.actorSpawnedCount();
         Actor after = game.world().spawnActor(Actor.class);
@@ -189,9 +189,11 @@ public final class GameplayEventsTest {
         assertTrue(contains(log, "event ActorSpawned HallBeacon"));
 
         String listed = console.exec("events");
-        assertTrue(listed.contains("events=6"));
+        assertTrue(listed.contains("events=8"));
         assertTrue(listed.contains("LevelLoaded listeners=1"));
         assertTrue(listed.contains("ActorSpawned listeners=2"));
+        assertTrue(listed.contains("BeginOverlap listeners=1"));
+        assertTrue(listed.contains("EndOverlap listeners=1"));
 
         String help = console.exec("help");
         assertTrue(help.contains("events"));

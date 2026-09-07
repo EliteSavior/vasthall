@@ -20,6 +20,10 @@ public final class EventType<T> {
             of("ActorSpawned", ActorEvent.class);
     public static final EventType<ActorEvent> ACTOR_DESTROYED =
             of("ActorDestroyed", ActorEvent.class);
+    public static final EventType<OverlapEvent> BEGIN_OVERLAP =
+            of("BeginOverlap", OverlapEvent.class);
+    public static final EventType<OverlapEvent> END_OVERLAP =
+            of("EndOverlap", OverlapEvent.class);
 
     private final String name;
     private final Class<T> payloadType;

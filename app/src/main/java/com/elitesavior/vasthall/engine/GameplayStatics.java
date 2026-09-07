@@ -1,5 +1,6 @@
 package com.elitesavior.vasthall.engine;
 
+import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -23,7 +24,9 @@ import java.util.function.Consumer;
  * {@link #getWidgetViewport} / {@link #createWidget} /
  * {@link #addToViewport} / {@link #removeFromParent} /
  * {@link #showWidget} / {@link #hideWidget} reach the world's
- * {@link WidgetViewport}.
+ * {@link WidgetViewport}. {@link #getCollisionWorld} /
+ * {@link #queryOverlaps} / {@link #isOverlapping} reach the world's
+ * {@link CollisionWorld}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -210,6 +213,24 @@ public final class GameplayStatics {
 
     public static Widget findWidget(World world, String name) {
         return getWidgetViewport(world).find(name);
+    }
+
+    public static CollisionWorld getCollisionWorld(World world) {
+        return requireWorld(world).collision();
+    }
+
+    public static List<CollisionComponent> queryOverlaps(
+            World world, CollisionComponent component) {
+        return getCollisionWorld(world).queryOverlaps(component);
+    }
+
+    public static boolean isOverlapping(
+            World world, CollisionComponent a, CollisionComponent b) {
+        return getCollisionWorld(world).isOverlapping(a, b);
+    }
+
+    public static int overlapCount(World world) {
+        return getCollisionWorld(world).overlapCount();
     }
 
     private static GameInstance requireGame(GameInstance game) {
