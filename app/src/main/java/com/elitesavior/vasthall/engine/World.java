@@ -12,6 +12,7 @@ import java.util.Map;
  * <p>Named {@link Level}s stream into this world via {@link #loadLevel(String)}
  * / {@link #unloadLevel(String)}. {@link #openLevel(String)} is same-world
  * OpenLevel: unload loaded streaming levels, then load the named map.
+ * Level definitions are resolved through {@link #assets()}.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -20,11 +21,23 @@ public final class World {
     private final List<Actor> living = new ArrayList<>();
     private final List<Actor> pendingAdd = new ArrayList<>();
     private final List<Actor> pendingKill = new ArrayList<>();
-    private final Map<String, LevelDefinition> catalog = new LinkedHashMap<>();
+    private final AssetRegistry assets;
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private long nextId = 1L;
     private boolean ticking;
     private int frameCount;
+
+    public World() {
+        this(new AssetRegistry());
+    }
+
+    public World(AssetRegistry assets) {
+        this.assets = assets == null ? new AssetRegistry() : assets;
+    }
+
+    public AssetRegistry assets() {
+        return assets;
+    }
 
     public <T extends Actor> T spawnActor(Class<T> type) {
         return spawnActor(type, Transform.identity());
@@ -43,28 +56,25 @@ public final class World {
     }
 
     public void registerLevel(LevelDefinition definition) {
-        if (definition == null) {
-            throw new IllegalArgumentException("level definition");
-        }
-        catalog.put(definition.name(), definition);
+        assets.registerLevel(definition);
     }
 
     /**
      * Stream {@code name} into this world (Unreal {@code LoadStreamLevel}).
-     * Already-loaded names return the existing {@link Level} without
-     * spawning duplicates.
+     * {@code name} may be the short id or the registered path. Already-loaded
+     * names return the existing {@link Level} without spawning duplicates.
      */
     public Level loadLevel(String name) {
         if (name == null || name.isEmpty()) {
             throw new IllegalArgumentException("level name");
         }
-        Level existing = loaded.get(name);
-        if (existing != null) {
-            return existing;
-        }
-        LevelDefinition definition = catalog.get(name);
+        LevelDefinition definition = assets.findLevel(name);
         if (definition == null) {
             throw new IllegalArgumentException("unknown level: " + name);
+        }
+        Level existing = loaded.get(definition.name());
+        if (existing != null) {
+            return existing;
         }
         Level level = new Level(definition.name());
         loaded.put(definition.name(), level);
@@ -78,13 +88,15 @@ public final class World {
 
     /**
      * Remove {@code name} and destroy its actors (Unreal {@code UnloadStreamLevel}).
+     * {@code name} may be the short id or the registered path.
      * Actors spawned outside this level stay in the world.
      */
     public boolean unloadLevel(String name) {
-        Level level = loaded.get(name);
+        Level level = findLoadedLevel(name);
         if (level == null) {
             return false;
         }
+        name = level.name();
         List<Actor> owned = new ArrayList<>(level.actors());
         for (Actor actor : owned) {
             destroyActor(actor);
@@ -110,11 +122,22 @@ public final class World {
     }
 
     public boolean isLevelLoaded(String name) {
-        return loaded.containsKey(name);
+        return findLoadedLevel(name) != null;
     }
 
     public Level findLoadedLevel(String name) {
-        return loaded.get(name);
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        Level direct = loaded.get(name);
+        if (direct != null) {
+            return direct;
+        }
+        LevelDefinition definition = assets.findLevel(name);
+        if (definition == null) {
+            return null;
+        }
+        return loaded.get(definition.name());
     }
 
     public List<Level> loadedLevels() {
@@ -257,6 +280,7 @@ public final class World {
         out.append("world.actors=").append(actorCount()).append('\n');
         out.append("world.frame=").append(frameCount).append('\n');
         out.append("world.levels=").append(loaded.size()).append('\n');
+        assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())
                     .append(" actors=").append(level.actorCount())

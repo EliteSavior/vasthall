@@ -5,7 +5,8 @@ package com.elitesavior.vasthall.engine;
  * Bobs on Y and yaws every tick. Native hall mesh is still owned by
  * {@code libvasthall.so}; this is the Java-side engine object. Ships a
  * {@link TagComponent} {@code beacon} so the dump shows a component without
- * changing native locomotion.
+ * changing native locomotion. Resolves {@code /Game/Textures/HallBeacon}
+ * from the world {@link AssetRegistry} in {@code beginPlay}.
  */
 public class HallBeaconActor extends Actor {
     public static final String DEFAULT_NAME = "HallBeacon";
@@ -14,11 +15,22 @@ public class HallBeaconActor extends Actor {
     public static final float YAW_DEGREES_PER_SECOND = 45.0f;
 
     private float age;
+    private TextureHandle texture;
 
     public HallBeaconActor() {
         setName(DEFAULT_NAME);
         setActorTickEnabled(true);
         addComponent(new TagComponent("beacon"));
+    }
+
+    /** Texture resolved from the world registry in {@link #beginPlay()}. */
+    public TextureHandle texture() {
+        return texture;
+    }
+
+    @Override
+    protected void beginPlay() {
+        texture = loadAsset(AssetRegistry.HALL_BEACON_TEXTURE_ID, TextureHandle.class);
     }
 
     @Override

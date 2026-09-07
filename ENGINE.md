@@ -1,6 +1,6 @@
-# Vast Hall engine (Scene / Actor / Level / Component)
+# Vast Hall engine (Scene / Actor / Level / Component / Asset)
 
-Unreal mental model: **the World owns Actors; Actors own Components; named Levels stream into the World**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components.
+Unreal mental model: **the World owns Actors; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -16,9 +16,13 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Transform` | `FTransform` | Location, rotator (pitch/yaw/roll degrees), scale |
 | `LevelDefinition` | map / streaming-level asset | Named list of actor templates |
 | `Level` | loaded `ULevel` | Actors currently owned by one loaded map |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `findAsset` / `loadAsset` |
+| `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
+| `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
+| `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
+| `MeshHandle` / `TextureHandle` / `AudioHandle` | stub `UObject`s | Named handles (no cook/decode yet) |
 | `PlayerPawn` | default pawn | Java handle for the native player avatar (tick off) |
-| `HallBeaconActor` | demo actor | Spawned by the Hall sample; bobs and yaws so tick is visible |
+| `HallBeaconActor` | demo actor | Spawned by the Hall sample; bobs and yaws; resolves a texture in `beginPlay` |
 
 Package: `com.elitesavior.vasthall.engine`.
 
@@ -27,15 +31,18 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names on `World` and `GameplayStatics`:
 
 ```java
+import com.elitesavior.vasthall.engine.AssetRegistry;
 import com.elitesavior.vasthall.engine.GameplayStatics;
 import com.elitesavior.vasthall.engine.LevelDefinition;
 import com.elitesavior.vasthall.engine.World;
 
-World world = new World();
-world.registerLevel(LevelDefinition.hall());          // classpath levels/Hall.json
-world.loadLevel("Hall");                              // LoadStreamLevel
-world.unloadLevel("Hall");                            // UnloadStreamLevel — destroys Hall actors only
-world.openLevel("Hall");                              // OpenLevel: unload streaming levels, then load Hall
+World world = new World(AssetRegistry.withDemoAssets()); // Hall + mesh/texture/audio stubs
+world.loadLevel("Hall");                                 // or "levels/Hall.json"
+world.unloadLevel("Hall");                               // UnloadStreamLevel — destroys Hall actors only
+world.openLevel("Hall");                                 // OpenLevel: unload streaming levels, then load Hall
+
+// Still valid: register a LevelDefinition yourself (indexes the registry)
+world.registerLevel(LevelDefinition.hall());
 
 GameplayStatics.loadLevel(world, "Hall");
 GameplayStatics.unloadLevel(world, "Hall");
@@ -83,7 +90,58 @@ world.registerLevel(LevelDefinition.named("Hall")
                 .at(0, 1.5f, 4).tickEnabled(true)));
 ```
 
-Play start calls `openLevel("Hall")`.
+Play start calls `AssetRegistry.withDemoAssets()` then `openLevel("Hall")`.
+
+## Register and load an asset
+
+Unreal Content Browser mental model, without an editor: every piece of content has a **short id** and a **path**. Register once on the world's `AssetRegistry`. Look up later by either key. Missing names return null (`find`) or throw `unknown asset` (`require` / `GameplayStatics.loadAsset`).
+
+Paths look like classpath files or `/Game/...` object paths:
+
+| Kind | Sample id | Sample path | Payload |
+| --- | --- | --- | --- |
+| `LEVEL` | `Hall` | `levels/Hall.json` | `LevelDefinition` (same JSON as the Hall sample) |
+| `MESH` | `HallMesh` | `/Game/Meshes/Hall` | `MeshHandle` stub for the native hall mesh |
+| `TEXTURE` | `HallBeaconTexture` | `/Game/Textures/HallBeacon` | `TextureHandle` stub |
+| `AUDIO` | `HallAmbience` | `/Game/Audio/HallAmbience` | `AudioHandle` stub |
+
+```java
+import com.elitesavior.vasthall.engine.Asset;
+import com.elitesavior.vasthall.engine.AssetKind;
+import com.elitesavior.vasthall.engine.AssetRegistry;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.LevelDefinition;
+import com.elitesavior.vasthall.engine.TextureHandle;
+import com.elitesavior.vasthall.engine.World;
+
+World world = new World();
+AssetRegistry assets = world.assets();
+
+// 1. Register (or call assets.registerDemoAssets() for the built-in Hall set)
+assets.register("Hall", "levels/Hall.json", AssetKind.LEVEL, LevelDefinition.hall());
+assets.register(
+        AssetRegistry.HALL_BEACON_TEXTURE_ID,
+        AssetRegistry.HALL_BEACON_TEXTURE_PATH,
+        AssetKind.TEXTURE,
+        new TextureHandle(AssetRegistry.HALL_BEACON_TEXTURE_ID));
+
+// 2. Look up by id or path
+Asset hall = assets.find("Hall");
+Asset same = assets.require("levels/Hall.json");
+LevelDefinition def = assets.findLevel("Hall");
+
+// 3. World / actor resolve through the same catalog
+world.loadLevel("levels/Hall.json");                 // uses findLevel, not a one-off read
+TextureHandle tex = world.findActor("HallBeacon")
+        .loadAsset("/Game/Textures/HallBeacon", TextureHandle.class);
+
+GameplayStatics.findAsset(world, "Hall");            // null if missing
+GameplayStatics.loadAsset(world, "Hall");            // throws unknown asset if missing
+```
+
+`World.registerLevel` is a convenience that indexes a `LEVEL` asset as `{name}` / `levels/{name}.json`. `World.loadLevel` and `openLevel` resolve that asset instead of keeping a second hardcoded catalog.
+
+Do world lookups in actor `beginPlay`, not in a constructor — the registry is on the `World`, and `owner().world()` is still null until `spawnActor` finishes. Hall's beacon does this for `/Game/Textures/HallBeacon`.
 
 ## Spawn an actor from code
 
@@ -207,17 +265,22 @@ Destroy during `tick` is deferred until that frame finishes, so a ticking actor 
 
 ## What you see in the APK
 
-On play start the activity `openLevel("Hall")`, which spawns:
+On play start the activity registers demo assets and `openLevel("Hall")`, which spawns:
 
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
-- `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`)
+- `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall actors=2 comps=2  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall actors=2 comps=2 assets=4  HallBeacon y=… yaw=…`. Y and yaw change every frame while you are in the hall (not in Menu). **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 world.actors=2
 world.frame=…
 world.levels=1
+world.assets=4
+asset id=Hall path=levels/Hall.json kind=LEVEL
+asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
+asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
+asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO
 level=Hall actors=2
 actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=1
   component class=TagComponent tick=0 tags=pawn
@@ -227,7 +290,8 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 
 ## Out of scope (this version)
 
-- Unreal Editor / Blueprint
+- Unreal Editor / Blueprint / a real Content Browser UI
+- Packaging / cooking / a packaging-pipeline rewrite
 - Networking
 - Native mesh spawn through JNI
 - Input / stick lockup changes

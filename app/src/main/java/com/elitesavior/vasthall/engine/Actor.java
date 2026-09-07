@@ -40,6 +40,17 @@ public class Actor {
         return world;
     }
 
+    /** Registry lookup by id or path. Null if this actor is not in a world. */
+    public Asset findAsset(String idOrPath) {
+        return world == null ? null : world.assets().find(idOrPath);
+    }
+
+    /** Typed payload, or null when missing / wrong kind. */
+    public <T> T loadAsset(String idOrPath, Class<T> type) {
+        Asset asset = findAsset(idOrPath);
+        return asset == null ? null : asset.as(type);
+    }
+
     /** Name of the loaded {@link Level} that spawned this actor, or null. */
     public String levelName() {
         return levelName;
