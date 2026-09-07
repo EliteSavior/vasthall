@@ -116,6 +116,7 @@ public final class DeveloperConsoleTest {
         assertTrue(out.contains("id=HallBlade"));
         assertTrue(out.contains("kind=DATA"));
         assertTrue(out.contains("type=WeaponDataAsset"));
+        assertTrue(out.contains("gtags=Item.Weapon.Melee"));
     }
 
     @Test
