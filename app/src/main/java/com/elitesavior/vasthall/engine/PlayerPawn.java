@@ -16,5 +16,6 @@ public class PlayerPawn extends Actor {
         setActorTickEnabled(false);
         addComponent(new TagComponent("pawn"));
         addComponent(new CollisionComponent().setBoxExtent(0.4f, 0.9f, 0.4f));
+        gameplayTags().addTag(GameplayTag.CHARACTER_PLAYER);
     }
 }

@@ -17,6 +17,7 @@ public class Actor {
     private String name;
     private String levelName;
     private final Transform transform = Transform.identity();
+    private final GameplayTagContainer gameplayTags = new GameplayTagContainer();
     private final List<ActorComponent> components = new ArrayList<>();
     private final List<TimerHandle> ownedTimers = new ArrayList<>();
     private boolean tickEnabled = true;
@@ -91,6 +92,15 @@ public class Actor {
 
     public Transform transform() {
         return transform;
+    }
+
+    /**
+     * Hierarchical gameplay tags on this actor. Unreal analog:
+     * {@code FGameplayTagContainer} on {@code AActor} / ASC. Distinct from
+     * the flat string {@link TagComponent} used by SaveGame / dump.
+     */
+    public GameplayTagContainer gameplayTags() {
+        return gameplayTags;
     }
 
     public boolean isActorTickEnabled() {
