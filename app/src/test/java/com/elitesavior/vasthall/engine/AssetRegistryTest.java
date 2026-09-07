@@ -128,6 +128,35 @@ public final class AssetRegistryTest {
         assertSame(side, world.assets().findLevel("Side"));
         assertSame(side, world.assets().findLevel("levels/Side.json"));
         assertEquals(1, world.loadLevel("levels/Side.json").actorCount());
+        assertTrue(world.isLevelLoaded("levels/Side.json"));
+        assertTrue(world.isLevelLoaded("Side"));
+        assertEquals("Side", world.findLoadedLevel("levels/Side.json").name());
+        assertTrue(world.unloadLevel("levels/Side.json"));
+        assertFalse(world.isLevelLoaded("Side"));
+        assertEquals(0, world.actorCount());
+    }
+
+    @Test
+    public void registerRejectsIdOrPathOwnedByAnotherAsset() {
+        LevelDefinition hall = LevelDefinition.named("Hall");
+        registry.register("Hall", "levels/Hall.json", AssetKind.LEVEL, hall);
+
+        try {
+            registry.register("HallMesh", "Hall", AssetKind.MESH, new MeshHandle("HallMesh"));
+            fail("expected path collision on Hall");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Hall"));
+        }
+        assertEquals(AssetKind.LEVEL, registry.require("Hall").kind());
+        assertSame(hall, registry.findLevel("levels/Hall.json"));
+
+        try {
+            registry.register("levels/Hall.json", AssetKind.MESH, new MeshHandle("stolen"));
+            fail("expected id collision on levels/Hall.json");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("levels/Hall.json"));
+        }
+        assertEquals(1, registry.size());
     }
 
     @Test

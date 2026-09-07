@@ -18,7 +18,7 @@ public final class AssetRegistry {
     public static final String HALL_LEVEL_PATH = LevelDefinition.HALL_RESOURCE;
     public static final String HALL_MESH_ID = "HallMesh";
     public static final String HALL_MESH_PATH = "/Game/Meshes/Hall";
-    public static final String HALL_BEACON_TEXTURE_ID = "HallBeacon";
+    public static final String HALL_BEACON_TEXTURE_ID = "HallBeaconTexture";
     public static final String HALL_BEACON_TEXTURE_PATH = "/Game/Textures/HallBeacon";
     public static final String HALL_AMBIENCE_ID = "HallAmbience";
     public static final String HALL_AMBIENCE_PATH = "/Game/Audio/HallAmbience";
@@ -78,10 +78,11 @@ public final class AssetRegistry {
         if (kind == AssetKind.LEVEL && !(payload instanceof LevelDefinition)) {
             throw new IllegalArgumentException("LEVEL payload must be LevelDefinition");
         }
-        forget(trimmedId);
+        assertKeyAvailable(trimmedId, trimmedId);
         if (!trimmedPath.equals(trimmedId)) {
-            forget(trimmedPath);
+            assertKeyAvailable(trimmedPath, trimmedId);
         }
+        forget(trimmedId);
         Asset asset = new Asset(trimmedId, trimmedPath, kind, payload);
         byId.put(trimmedId, asset);
         if (!trimmedPath.equals(trimmedId)) {
@@ -158,9 +159,17 @@ public final class AssetRegistry {
         }
     }
 
+    private void assertKeyAvailable(String key, String ownerId) {
+        Asset existing = find(key);
+        if (existing != null && !existing.id().equals(ownerId)) {
+            throw new IllegalArgumentException(
+                    "asset key already registered: " + key + " (" + existing.id() + ")");
+        }
+    }
+
     private void forget(String key) {
         Asset existing = find(key);
-        if (existing == null) {
+        if (existing == null || !existing.id().equals(key)) {
             return;
         }
         byId.remove(existing.id());

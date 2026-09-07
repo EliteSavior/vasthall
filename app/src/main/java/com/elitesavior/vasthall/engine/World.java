@@ -88,13 +88,15 @@ public final class World {
 
     /**
      * Remove {@code name} and destroy its actors (Unreal {@code UnloadStreamLevel}).
+     * {@code name} may be the short id or the registered path.
      * Actors spawned outside this level stay in the world.
      */
     public boolean unloadLevel(String name) {
-        Level level = loaded.get(name);
+        Level level = findLoadedLevel(name);
         if (level == null) {
             return false;
         }
+        name = level.name();
         List<Actor> owned = new ArrayList<>(level.actors());
         for (Actor actor : owned) {
             destroyActor(actor);
@@ -120,11 +122,22 @@ public final class World {
     }
 
     public boolean isLevelLoaded(String name) {
-        return loaded.containsKey(name);
+        return findLoadedLevel(name) != null;
     }
 
     public Level findLoadedLevel(String name) {
-        return loaded.get(name);
+        if (name == null || name.isEmpty()) {
+            return null;
+        }
+        Level direct = loaded.get(name);
+        if (direct != null) {
+            return direct;
+        }
+        LevelDefinition definition = assets.findLevel(name);
+        if (definition == null) {
+            return null;
+        }
+        return loaded.get(definition.name());
     }
 
     public List<Level> loadedLevels() {

@@ -102,7 +102,7 @@ Paths look like classpath files or `/Game/...` object paths:
 | --- | --- | --- | --- |
 | `LEVEL` | `Hall` | `levels/Hall.json` | `LevelDefinition` (same JSON as the Hall sample) |
 | `MESH` | `HallMesh` | `/Game/Meshes/Hall` | `MeshHandle` stub for the native hall mesh |
-| `TEXTURE` | `HallBeacon` | `/Game/Textures/HallBeacon` | `TextureHandle` stub |
+| `TEXTURE` | `HallBeaconTexture` | `/Game/Textures/HallBeacon` | `TextureHandle` stub |
 | `AUDIO` | `HallAmbience` | `/Game/Audio/HallAmbience` | `AudioHandle` stub |
 
 ```java
@@ -279,7 +279,7 @@ world.levels=1
 world.assets=4
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
-asset id=HallBeacon path=/Game/Textures/HallBeacon kind=TEXTURE
+asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
 asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO
 level=Hall actors=2
 actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=1
