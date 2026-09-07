@@ -32,6 +32,8 @@ public final class DeveloperConsole {
 
     private World world;
     private final Map<String, Entry> commands = new LinkedHashMap<>();
+    private static final int LOG_CAP = 80;
+
     private final List<String> log = new ArrayList<>();
 
     public DeveloperConsole() {
@@ -106,6 +108,9 @@ public final class DeveloperConsole {
             }
         }
         log.add("> " + trimmed + "\n" + output);
+        while (log.size() > LOG_CAP) {
+            log.remove(0);
+        }
         return output;
     }
 

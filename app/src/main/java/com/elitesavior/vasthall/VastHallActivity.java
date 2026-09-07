@@ -846,7 +846,7 @@ public final class VastHallActivity extends Activity implements
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.21.0";
+        String version = "0.22.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {

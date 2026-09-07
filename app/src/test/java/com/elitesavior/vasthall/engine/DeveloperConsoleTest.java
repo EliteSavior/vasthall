@@ -137,6 +137,16 @@ public final class DeveloperConsoleTest {
     }
 
     @Test
+    public void statReportsWorldCounts() {
+        world.openLevel("Hall");
+        String out = console.exec("stat");
+        assertTrue(out.contains("actors=2"));
+        assertTrue(out.contains("levels=1"));
+        assertTrue(out.contains("assets=4"));
+        assertTrue(out.contains("frame=0"));
+    }
+
+    @Test
     public void execAppendsToLog() {
         console.exec("help");
         console.exec("assets");
