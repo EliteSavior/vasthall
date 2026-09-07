@@ -76,6 +76,23 @@ public final class EventDispatcherTest {
     }
 
     @Test
+    public void unbindDoesNotRemoveADifferentEventType() {
+        AtomicInteger loaded = new AtomicInteger();
+        AtomicInteger spawned = new AtomicInteger();
+        DelegateHandle level = events.bind(EventType.LEVEL_LOADED, ignored -> loaded.incrementAndGet());
+        events.bind(EventType.ACTOR_SPAWNED, ignored -> spawned.incrementAndGet());
+
+        events.unbind(level);
+        events.broadcast(EventType.LEVEL_LOADED, new LevelEvent(null, "Hall"));
+        events.broadcast(EventType.ACTOR_SPAWNED, new ActorEvent(null, null));
+
+        assertEquals(0, loaded.get());
+        assertEquals(1, spawned.get());
+        assertEquals(1, events.listenerCount());
+        assertFalse(level.isValid());
+    }
+
+    @Test
     public void ofReturnsSameDelegateForAType() {
         MulticastDelegate<LevelEvent> first = events.of(EventType.LEVEL_LOADED);
         MulticastDelegate<LevelEvent> second = events.of(EventType.LEVEL_LOADED);

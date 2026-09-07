@@ -13,10 +13,10 @@ import java.util.function.Consumer;
  * <p>Single-threaded: bind / unbind / broadcast from the world thread.
  * Broadcast snapshots listeners so a callback may bind or unbind safely.
  * A listener bound during broadcast is not invoked until the next broadcast.
+ * Handles are identity-keyed so two delegates never share a bind slot.
  */
 public final class MulticastDelegate<T> {
-    private final Map<Long, Consumer<T>> listeners = new LinkedHashMap<>();
-    private final Map<Long, DelegateHandle> handles = new LinkedHashMap<>();
+    private final Map<DelegateHandle, Consumer<T>> listeners = new LinkedHashMap<>();
     private long nextId = 1L;
 
     /** Unreal {@code Add}. Returns a handle for {@link #unbind(DelegateHandle)}. */
@@ -25,8 +25,7 @@ public final class MulticastDelegate<T> {
             throw new IllegalArgumentException("listener");
         }
         DelegateHandle handle = new DelegateHandle(nextId++);
-        listeners.put(handle.id(), listener);
-        handles.put(handle.id(), handle);
+        listeners.put(handle, listener);
         return handle;
     }
 
@@ -35,12 +34,8 @@ public final class MulticastDelegate<T> {
         if (handle == null || !handle.isValid()) {
             return;
         }
-        listeners.remove(handle.id());
-        DelegateHandle owned = handles.remove(handle.id());
+        listeners.remove(handle);
         handle.invalidate();
-        if (owned != null && owned != handle) {
-            owned.invalidate();
-        }
     }
 
     /** Unreal {@code Broadcast}. Listeners run in bind order. */
@@ -59,13 +54,12 @@ public final class MulticastDelegate<T> {
     }
 
     public boolean isBound(DelegateHandle handle) {
-        return handle != null && handle.isValid() && listeners.containsKey(handle.id());
+        return handle != null && handle.isValid() && listeners.containsKey(handle);
     }
 
     public void clear() {
-        List<DelegateHandle> snapshot = new ArrayList<>(handles.values());
+        List<DelegateHandle> snapshot = new ArrayList<>(listeners.keySet());
         listeners.clear();
-        handles.clear();
         for (DelegateHandle handle : snapshot) {
             handle.invalidate();
         }

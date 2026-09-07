@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 public final class EventDispatcher {
     private final Map<String, MulticastDelegate<?>> buses = new LinkedHashMap<>();
     private final Map<String, EventType<?>> types = new LinkedHashMap<>();
+    private final Map<DelegateHandle, MulticastDelegate<?>> owners = new LinkedHashMap<>();
 
     public <T> MulticastDelegate<T> of(EventType<T> type) {
         EventType<T> key = requireType(type);
@@ -37,11 +38,19 @@ public final class EventDispatcher {
     }
 
     public <T> DelegateHandle bind(EventType<T> type, Consumer<T> listener) {
-        return of(type).bind(listener);
+        MulticastDelegate<T> bus = of(type);
+        DelegateHandle handle = bus.bind(listener);
+        owners.put(handle, bus);
+        return handle;
     }
 
     public void unbind(DelegateHandle handle) {
         if (handle == null || !handle.isValid()) {
+            return;
+        }
+        MulticastDelegate<?> owned = owners.remove(handle);
+        if (owned != null) {
+            owned.unbind(handle);
             return;
         }
         for (MulticastDelegate<?> bus : buses.values()) {
@@ -77,6 +86,10 @@ public final class EventDispatcher {
         if (handle == null || !handle.isValid()) {
             return false;
         }
+        MulticastDelegate<?> owned = owners.get(handle);
+        if (owned != null) {
+            return owned.isBound(handle);
+        }
         for (MulticastDelegate<?> bus : buses.values()) {
             if (bus.isBound(handle)) {
                 return true;
@@ -92,6 +105,7 @@ public final class EventDispatcher {
         }
         buses.clear();
         types.clear();
+        owners.clear();
     }
 
     void appendDump(StringBuilder out) {

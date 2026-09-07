@@ -46,11 +46,13 @@ public final class GameplayEventsTest {
         DelegateHandle handle = world.events().bind(
                 EventType.ACTOR_SPAWNED, event -> heard.add(event.actor().name()));
 
-        Actor first = world.spawnActor(Actor.class);
+        Actor first = new Actor();
         first.setName("Keep");
+        world.spawnActor(first, Transform.identity());
         world.events().unbind(handle);
-        Actor second = world.spawnActor(Actor.class);
+        Actor second = new Actor();
         second.setName("Drop");
+        world.spawnActor(second, Transform.identity());
 
         assertEquals(List.of("Keep"), heard);
         assertEquals(0, world.events().listenerCount(EventType.ACTOR_SPAWNED));

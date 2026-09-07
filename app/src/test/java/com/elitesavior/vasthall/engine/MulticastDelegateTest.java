@@ -102,9 +102,13 @@ public final class MulticastDelegateTest {
     @Test
     public void bindDuringBroadcastDoesNotFireThisTime() {
         List<String> heard = new ArrayList<>();
+        boolean[] added = {false};
         events.bind(payload -> {
             heard.add("first:" + payload);
-            events.bind(inner -> heard.add("late:" + inner));
+            if (!added[0]) {
+                added[0] = true;
+                events.bind(inner -> heard.add("late:" + inner));
+            }
         });
 
         events.broadcast("now");
