@@ -212,6 +212,7 @@ public final class GameInstanceTest {
         game.world().appendDump(out);
         String dump = out.toString();
         assertTrue(dump.contains("game.instance=1"));
+        assertTrue(dump.contains("game.saves=0"));
         assertTrue(dump.contains("game.mode=HallGameMode pawn=PlayerPawn started=1"));
         assertTrue(dump.contains("world.actors=2"));
         assertTrue(dump.contains("world.levels=1"));

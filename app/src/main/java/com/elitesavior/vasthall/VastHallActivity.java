@@ -789,6 +789,7 @@ public final class VastHallActivity extends Activity implements
 
     private void beginPlayWorld() {
         game = GameInstance.withDemoAssets();
+        game.setSaveDirectory(new File(getFilesDir(), "SaveGames"));
         game.init();
         game.openLevel("Hall");
         world = game.world();
@@ -842,7 +843,7 @@ public final class VastHallActivity extends Activity implements
         String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d  %s",
                 levelBit,
                 modeBit,
                 world.actorCount(),
@@ -850,12 +851,13 @@ public final class VastHallActivity extends Activity implements
                 world.assets().size(),
                 world.timerManager().timerCount(),
                 world.events().listenerCount(),
+                game == null ? 0 : game.saveSlots().size(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.25.0";
+        String version = "0.26.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {

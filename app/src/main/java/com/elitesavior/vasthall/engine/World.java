@@ -350,6 +350,8 @@ public final class World {
 
     public void appendDump(StringBuilder out) {
         out.append("game.instance=").append(gameInstance == null ? 0 : 1).append('\n');
+        out.append("game.saves=").append(gameInstance == null ? 0 : gameInstance.saveSlots().size())
+                .append('\n');
         if (gameMode == null) {
             out.append("game.mode=-\n");
         } else {

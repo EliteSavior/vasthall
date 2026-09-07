@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, and a multicast EventDispatcher; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, and a multicast EventDispatcher; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -8,7 +8,7 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
-| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher across travel |
+| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, SaveGameSystem across travel |
 | `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds |
 | `TimerManager` / `TimerHandle` | `FTimerManager` / `FTimerHandle` | SetTimer by delay, loop, clear, pause/unpause |
 | `EventDispatcher` / `MulticastDelegate` / `DelegateHandle` | Event Dispatcher / `FMulticastDelegate` / `FDelegateHandle` | Typed bind / unbind / broadcast |
@@ -21,7 +21,8 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `Transform` | `FTransform` | Location, rotator (pitch/yaw/roll degrees), scale |
 | `LevelDefinition` | map / streaming-level asset | Named list of actor templates |
 | `Level` | loaded `ULevel` | Actors currently owned by one loaded map |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` |
+| `SaveGame` / `SaveGameSystem` | `USaveGame` + slot APIs | Create / save / load / does-exist / delete a JSON slot |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
 | `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
@@ -37,7 +38,7 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names, in order:
 
 1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
-2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
 3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
 4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
 
@@ -55,6 +56,7 @@ game.assets();                          // same AssetRegistry
 game.console();                         // same DeveloperConsole
 game.timerManager();                    // same TimerManager (on the World)
 game.events();                          // same EventDispatcher (on the World)
+game.saves();                           // same SaveGameSystem (slot directory)
 game.gameMode();                        // HallGameMode for Hall.json
 ```
 
@@ -262,6 +264,54 @@ load Hall
 
 `events` lists listener counts. Play start (`open Hall`) already logs the Hall load / pawn / beacon spawns.
 
+## SaveGame
+
+Unreal mental model: `UGameplayStatics::CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot` / `DoesSaveGameExist` / `DeleteGameInSlot`. Java persists a small JSON payload (`<slot>.sav`) — current level name, GameMode class, and live actor fields (name, class, level, transform, tick, `TagComponent` tags). No cloud, no networking, no native renderer dump.
+
+```java
+import com.elitesavior.vasthall.engine.GameInstance;
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.SaveGame;
+
+GameInstance game = GameInstance.withDemoAssets();
+game.setSaveDirectory(new java.io.File(tempDir, "saves")); // tests; APK uses filesDir/SaveGames
+game.init();
+game.openLevel("Hall");
+
+SaveGame snapshot = game.createSaveGame();          // or GameplayStatics.createSaveGame(game)
+snapshot.levelName();                               // "Hall"
+snapshot.findActor("HallBeacon").location();
+
+game.saveGameToSlot("Slot0");                       // creates Slot0.sav
+game.doesSaveGameExist("Slot0");
+SaveGame loaded = game.loadSaveGameObject("Slot0"); // read only
+game.loadGameFromSlot("Slot0");                     // openLevel + restore matching actors
+game.deleteGameInSlot("Slot0");
+
+GameplayStatics.saveGameToSlot(game.world(), "Slot0");
+GameplayStatics.loadGameFromSlot(game, "Slot0");
+```
+
+| Call | What it does |
+| --- | --- |
+| `createSaveGame()` | Snapshot the live World (does not write a file) |
+| `saveGameToSlot(slot)` | Capture + write `{saveDir}/{slot}.sav` (overwrite) |
+| `loadSaveGameObject(slot)` | Parse the slot; null if missing / invalid name |
+| `loadGameFromSlot(slot)` | Read, `openLevel` the saved map, restore actors by name |
+| `doesSaveGameExist` / `deleteGameInSlot` | Slot file probe / delete |
+| `saveSlots()` | Sorted list of valid slot names in the directory |
+
+Slot names are `[A-Za-z0-9][A-Za-z0-9_-]{0,63}` — no `/`, `\`, `.`, or `..`. Tests inject a temp directory (`setSaveDirectory`); play start uses `getFilesDir()/SaveGames`. Format `version` is `SaveGame.FORMAT_VERSION` (1). Unknown actors after travel are skipped.
+
+Console demo (fossDebug `~`):
+
+```
+SaveGame Slot0
+LoadGame Slot0
+```
+
+Names are case-insensitive (`savegame` / `loadgame`). Missing slots return `error: no save: …`.
+
 ## Register and load an asset
 
 Unreal Content Browser mental model, without an editor: every piece of content has a **short id** and a **path**. Register once on the world's `AssetRegistry`. Look up later by either key. Missing names return null (`find`) or throw `unknown asset` (`require` / `GameplayStatics.loadAsset`).
@@ -331,6 +381,8 @@ console.exec("open Hall");
 console.exec("settimer 1 once hello");
 console.exec("timers");
 console.exec("events");
+console.exec("SaveGame Slot0");
+console.exec("LoadGame Slot0");
 console.register("ping", "Echo ping", (bound, args) -> "pong");
 ```
 
@@ -342,11 +394,13 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=…` |
 | `settimer <seconds> [once\|loop] [message]` | `SetTimer` — delayed console log |
 | `cleartimer [id]` | `ClearTimer` (last handle if id omitted) |
 | `timers` | List active TimerManager entries |
 | `events` | List EventDispatcher listener counts |
+| `savegame <slot>` (`SaveGame`) | Capture the World and write a slot |
+| `loadgame <slot>` (`LoadGame`) | Load a slot and restore the World |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -479,10 +533,11 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1 events=6  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=6` is the console's four engine-hook binds plus HallGameMode's two. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=2 assets=4 timers=1 events=6 saves=0  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=6` is the console's four engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
+game.saves=0
 game.mode=HallGameMode pawn=PlayerPawn started=1
 world.actors=2
 world.frame=…
@@ -506,8 +561,9 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 - Unreal Editor / Blueprint / a real Content Browser UI / Blueprint Event Dispatcher reflection
 - A full in-editor output log / command history browser
 - Packaging / cooking / a packaging-pipeline rewrite
-- Networking
+- Networking / cloud saves
 - Native mesh spawn through JNI
+- Full serialization of native renderer state
 - Input / stick lockup changes
 - Seamless travel / a second `World` instance / multiplayer
 - A full Unreal Editor GameMode UI / PlayerController / GameState

@@ -14,7 +14,10 @@ import java.util.function.Consumer;
  * {@link #loadAsset} look up the world's {@link AssetRegistry}.
  * {@link #getTimerManager} / {@link #setTimer} reach the world's
  * {@link TimerManager}. {@link #getEventDispatcher} / {@link #bindEvent}
- * reach the world's {@link EventDispatcher}.
+ * reach the world's {@link EventDispatcher}. {@link #createSaveGame} /
+ * {@link #saveGameToSlot} / {@link #loadGameFromSlot} /
+ * {@link #doesSaveGameExist} / {@link #deleteGameInSlot} persist a
+ * {@link SaveGame} through the owning {@link GameInstance}.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -93,6 +96,49 @@ public final class GameplayStatics {
     /** Hard lookup. Missing names throw {@code unknown asset}. */
     public static Asset loadAsset(World world, String idOrPath) {
         return requireWorld(world).assets().require(idOrPath);
+    }
+
+    public static SaveGame createSaveGame(GameInstance game) {
+        return requireGame(game).createSaveGame();
+    }
+
+    public static boolean saveGameToSlot(GameInstance game, String slot) {
+        return requireGame(game).saveGameToSlot(slot);
+    }
+
+    public static boolean saveGameToSlot(World world, String slot) {
+        return saveGameToSlot(requireGame(getGameInstance(world)), slot);
+    }
+
+    public static boolean loadGameFromSlot(GameInstance game, String slot) {
+        return requireGame(game).loadGameFromSlot(slot);
+    }
+
+    public static boolean loadGameFromSlot(World world, String slot) {
+        return loadGameFromSlot(requireGame(getGameInstance(world)), slot);
+    }
+
+    public static boolean doesSaveGameExist(GameInstance game, String slot) {
+        return requireGame(game).doesSaveGameExist(slot);
+    }
+
+    public static boolean doesSaveGameExist(World world, String slot) {
+        return doesSaveGameExist(requireGame(getGameInstance(world)), slot);
+    }
+
+    public static boolean deleteGameInSlot(GameInstance game, String slot) {
+        return requireGame(game).deleteGameInSlot(slot);
+    }
+
+    public static boolean deleteGameInSlot(World world, String slot) {
+        return deleteGameInSlot(requireGame(getGameInstance(world)), slot);
+    }
+
+    private static GameInstance requireGame(GameInstance game) {
+        if (game == null) {
+            throw new IllegalArgumentException("game");
+        }
+        return game;
     }
 
     private static World requireWorld(World world) {
