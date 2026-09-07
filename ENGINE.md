@@ -696,7 +696,10 @@ WeaponDataAsset blade = new WeaponDataAsset("SideBlade", 10.0f, 0.2f, 6);
 blade.gameplayTags().addTag("Item.Weapon.Melee");
 
 GameplayTagQuery stunnedOrBurning = GameplayTagQuery.any("Status.Stunned", "Status.Burning");
-GameplayTagQuery livingPlayer = GameplayTagQuery.all("Character.Player").none("Status.Dead");
+GameplayTagQuery livingPlayer = GameplayTagQuery.builder()
+        .all("Character.Player")
+        .none("Status.Dead")
+        .build();
 GameplayTagQuery meleeReady = GameplayTagQuery.builder()
         .all("Character.Player")
         .any("Item.Weapon.Melee", "Item.Weapon.Ranged")

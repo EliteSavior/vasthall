@@ -128,7 +128,8 @@ public final class GameplayTagTest {
         assertTrue(GameplayStatics.hasTag(pawn, "Character.Player"));
         assertTrue(GameplayStatics.hasTag(blade, GameplayTag.of("Item.Weapon")));
         assertTrue(GameplayStatics.matches(
-                pawn, GameplayTagQuery.all("Character").none("Status.Dead")));
+                pawn,
+                GameplayTagQuery.builder().all("Character").none("Status.Dead").build()));
 
         List<Actor> players = GameplayStatics.getActorsWithTag(world, "Character");
         assertEquals(1, players.size());

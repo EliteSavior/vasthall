@@ -47,11 +47,6 @@ public final class GameplayTagQuery {
                 new GameplayTagContainer());
     }
 
-    /** Append required tags; used as {@code all("A").none("B")}. */
-    public GameplayTagQuery none(String... tags) {
-        return withNone(tags);
-    }
-
     public boolean matches(GameplayTagContainer container) {
         if (container == null) {
             return false;
