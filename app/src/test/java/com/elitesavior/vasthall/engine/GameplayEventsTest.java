@@ -81,6 +81,60 @@ public final class GameplayEventsTest {
     }
 
     @Test
+    public void templateNameIsAppliedBeforeActorSpawned() {
+        World world = new World();
+        world.registerLevel(LevelDefinition.named("Side")
+                .actor(ActorTemplate.of("Actor").named("ArenaLamp")));
+        List<String> heard = new ArrayList<>();
+        world.events().bind(EventType.ACTOR_SPAWNED, event -> heard.add(event.actor().name()));
+
+        world.loadLevel("Side");
+
+        assertEquals(List.of("ArenaLamp"), heard);
+    }
+
+    @Test
+    public void loadLevelDuringTickBroadcastsAfterActorsSpawn() {
+        World world = new World();
+        world.registerLevel(LevelDefinition.named("Side")
+                .actor(ActorTemplate.of("Actor").named("ArenaLamp")));
+        List<String> heard = new ArrayList<>();
+        world.events().bind(EventType.ACTOR_SPAWNED, event -> heard.add("spawn:" + event.actor().name()));
+        world.events().bind(EventType.LEVEL_LOADED, event -> heard.add("load:" + event.levelName()));
+        WorldTest.ProbeActor spawner = world.spawnActor(WorldTest.ProbeActor.class);
+        heard.clear();
+        spawner.onTick = (self, dt) -> {
+            self.world().loadLevel("Side");
+            self.onTick = null;
+        };
+
+        world.tick(0.016f);
+
+        assertEquals(List.of("spawn:ArenaLamp", "load:Side"), heard);
+    }
+
+    @Test
+    public void unloadLevelDuringTickBroadcastsAfterActorsDestroy() {
+        World world = new World();
+        world.registerLevel(LevelDefinition.named("Side")
+                .actor(ActorTemplate.of("Actor").named("ArenaLamp")));
+        world.loadLevel("Side");
+        List<String> heard = new ArrayList<>();
+        world.events().bind(EventType.ACTOR_DESTROYED, event -> heard.add("destroy:" + event.actor().name()));
+        world.events().bind(EventType.LEVEL_UNLOADED, event -> heard.add("unload:" + event.levelName()));
+        WorldTest.ProbeActor watcher = world.spawnActor(WorldTest.ProbeActor.class);
+        heard.clear();
+        watcher.onTick = (self, dt) -> {
+            self.world().unloadLevel("Side");
+            self.onTick = null;
+        };
+
+        world.tick(0.016f);
+
+        assertEquals(List.of("destroy:ArenaLamp", "unload:Side"), heard);
+    }
+
+    @Test
     public void gameInstanceExposesTheWorldEventDispatcher() {
         GameInstance game = GameInstance.withDemoAssets();
         game.init();

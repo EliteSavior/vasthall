@@ -134,6 +134,20 @@ public final class MulticastDelegateTest {
     }
 
     @Test
+    public void unbindUnknownHandleDoesNotInvalidateOrDropOthers() {
+        List<String> heard = new ArrayList<>();
+        DelegateHandle keep = events.bind(heard::add);
+        DelegateHandle foreign = new MulticastDelegate<String>().bind(ignored -> { });
+
+        events.unbind(foreign);
+        events.broadcast("x");
+
+        assertTrue(foreign.isValid());
+        assertTrue(keep.isValid());
+        assertEquals(List.of("x"), heard);
+    }
+
+    @Test
     public void rejectsNullListener() {
         try {
             events.bind(null);

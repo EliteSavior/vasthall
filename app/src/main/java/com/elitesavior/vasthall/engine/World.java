@@ -26,6 +26,8 @@ public final class World {
     private final List<Actor> living = new ArrayList<>();
     private final List<Actor> pendingAdd = new ArrayList<>();
     private final List<Actor> pendingKill = new ArrayList<>();
+    private final List<LevelEvent> pendingLevelLoaded = new ArrayList<>();
+    private final List<LevelEvent> pendingLevelUnloaded = new ArrayList<>();
     private final AssetRegistry assets;
     private final TimerManager timers = new TimerManager();
     private final EventDispatcher events = new EventDispatcher();
@@ -116,7 +118,7 @@ public final class World {
             actor.bindLevel(level.name());
             level.add(actor);
         }
-        events.broadcast(EventType.LEVEL_LOADED, new LevelEvent(this, definition.name()));
+        announceLevelLoaded(definition.name());
         return level;
     }
 
@@ -140,7 +142,7 @@ public final class World {
         }
         level.clear();
         loaded.remove(name);
-        events.broadcast(EventType.LEVEL_UNLOADED, new LevelEvent(this, name));
+        announceLevelUnloaded(name);
         return true;
     }
 
@@ -206,14 +208,21 @@ public final class World {
 
     private Actor spawnFromTemplate(ActorTemplate template) {
         Class<? extends Actor> type = ActorTypes.resolve(template.className());
-        Actor actor = spawnActor(type, template.transform());
+        Actor actor;
+        try {
+            actor = type.getDeclaredConstructor().newInstance();
+        } catch (ReflectiveOperationException failed) {
+            throw new IllegalArgumentException(
+                    "Actor type needs a public no-arg constructor: " + type.getName(),
+                    failed);
+        }
         if (template.name() != null) {
             actor.setName(template.name());
         }
         if (template.tickEnabled() != null) {
             actor.setActorTickEnabled(template.tickEnabled());
         }
-        return actor;
+        return spawnActor(actor, template.transform());
     }
 
     public <T extends Actor> T spawnActor(T actor, Transform transform) {
@@ -393,18 +402,53 @@ public final class World {
             }
             pendingKill.clear();
         }
-        if (pendingAdd.isEmpty()) {
-            return;
-        }
-        List<Actor> added = new ArrayList<>(pendingAdd);
-        pendingAdd.clear();
-        for (Actor actor : added) {
-            if (actor.isPendingKill()) {
-                continue;
+        if (!pendingAdd.isEmpty()) {
+            List<Actor> added = new ArrayList<>(pendingAdd);
+            pendingAdd.clear();
+            for (Actor actor : added) {
+                if (actor.isPendingKill()) {
+                    continue;
+                }
+                living.add(actor);
+                actor.callBeginPlay();
+                broadcastActorSpawned(actor);
             }
-            living.add(actor);
-            actor.callBeginPlay();
-            broadcastActorSpawned(actor);
+        }
+        flushPendingLevelEvents();
+    }
+
+    private void announceLevelLoaded(String name) {
+        LevelEvent event = new LevelEvent(this, name);
+        if (ticking) {
+            pendingLevelLoaded.add(event);
+        } else {
+            events.broadcast(EventType.LEVEL_LOADED, event);
+        }
+    }
+
+    private void announceLevelUnloaded(String name) {
+        LevelEvent event = new LevelEvent(this, name);
+        if (ticking) {
+            pendingLevelUnloaded.add(event);
+        } else {
+            events.broadcast(EventType.LEVEL_UNLOADED, event);
+        }
+    }
+
+    private void flushPendingLevelEvents() {
+        if (!pendingLevelUnloaded.isEmpty()) {
+            List<LevelEvent> unloaded = new ArrayList<>(pendingLevelUnloaded);
+            pendingLevelUnloaded.clear();
+            for (LevelEvent event : unloaded) {
+                events.broadcast(EventType.LEVEL_UNLOADED, event);
+            }
+        }
+        if (!pendingLevelLoaded.isEmpty()) {
+            List<LevelEvent> loadedEvents = new ArrayList<>(pendingLevelLoaded);
+            pendingLevelLoaded.clear();
+            for (LevelEvent event : loadedEvents) {
+                events.broadcast(EventType.LEVEL_LOADED, event);
+            }
         }
     }
 

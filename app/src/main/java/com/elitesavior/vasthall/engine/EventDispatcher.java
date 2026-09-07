@@ -59,7 +59,6 @@ public final class EventDispatcher {
                 return;
             }
         }
-        handle.invalidate();
     }
 
     public <T> void broadcast(EventType<T> type, T payload) {

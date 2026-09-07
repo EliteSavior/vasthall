@@ -79,17 +79,29 @@ public final class EventDispatcherTest {
     public void unbindDoesNotRemoveADifferentEventType() {
         AtomicInteger loaded = new AtomicInteger();
         AtomicInteger spawned = new AtomicInteger();
-        DelegateHandle level = events.bind(EventType.LEVEL_LOADED, ignored -> loaded.incrementAndGet());
-        events.bind(EventType.ACTOR_SPAWNED, ignored -> spawned.incrementAndGet());
+        events.bind(EventType.LEVEL_LOADED, ignored -> loaded.incrementAndGet());
+        DelegateHandle later = events.bind(EventType.ACTOR_SPAWNED, ignored -> spawned.incrementAndGet());
 
-        events.unbind(level);
+        events.unbind(later);
         events.broadcast(EventType.LEVEL_LOADED, new LevelEvent(null, "Hall"));
         events.broadcast(EventType.ACTOR_SPAWNED, new ActorEvent(null, null));
 
-        assertEquals(0, loaded.get());
-        assertEquals(1, spawned.get());
+        assertEquals(1, loaded.get());
+        assertEquals(0, spawned.get());
         assertEquals(1, events.listenerCount());
-        assertFalse(level.isValid());
+        assertFalse(later.isValid());
+    }
+
+    @Test
+    public void ofUnbindDoesNotInvalidateAForeignHandle() {
+        AtomicInteger loaded = new AtomicInteger();
+        DelegateHandle handle = events.bind(EventType.LEVEL_LOADED, ignored -> loaded.incrementAndGet());
+
+        events.of(EventType.ACTOR_SPAWNED).unbind(handle);
+        events.broadcast(EventType.LEVEL_LOADED, new LevelEvent(null, "Hall"));
+
+        assertTrue(handle.isValid());
+        assertEquals(1, loaded.get());
     }
 
     @Test

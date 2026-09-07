@@ -22,15 +22,15 @@ public class HallGameMode extends GameMode {
 
     @Override
     public void startPlay() {
-        super.startPlay();
-        TimerManager timers = timerManager();
-        if (timers != null) {
-            delayedStart = timers.setTimer(this::onDelayedStart, DELAYED_START_SECONDS, false);
-        }
         EventDispatcher events = events();
         if (events != null) {
             actorSpawned = events.bind(EventType.ACTOR_SPAWNED, this::onActorSpawned);
             levelUnloaded = events.bind(EventType.LEVEL_UNLOADED, this::onLevelUnloaded);
+        }
+        super.startPlay();
+        TimerManager timers = timerManager();
+        if (timers != null) {
+            delayedStart = timers.setTimer(this::onDelayedStart, DELAYED_START_SECONDS, false);
         }
     }
 

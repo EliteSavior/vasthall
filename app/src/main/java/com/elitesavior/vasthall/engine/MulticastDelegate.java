@@ -34,7 +34,9 @@ public final class MulticastDelegate<T> {
         if (handle == null || !handle.isValid()) {
             return;
         }
-        listeners.remove(handle);
+        if (listeners.remove(handle) == null) {
+            return;
+        }
         handle.invalidate();
     }
 
