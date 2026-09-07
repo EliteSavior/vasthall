@@ -35,6 +35,7 @@ import com.elitesavior.vasthall.engine.DeveloperConsole;
 import com.elitesavior.vasthall.engine.GameInstance;
 import com.elitesavior.vasthall.engine.GameMode;
 import com.elitesavior.vasthall.engine.HallBeaconActor;
+import com.elitesavior.vasthall.engine.InputKeys;
 import com.elitesavior.vasthall.engine.Level;
 import com.elitesavior.vasthall.engine.World;
 
@@ -212,16 +213,19 @@ public final class VastHallActivity extends Activity implements
                 case MotionEvent.ACTION_DOWN:
                     debugHub.setJump(true);
                     hudAxes.setJump(true);
+                    PlayInputRouter.feedTouchButton(world, InputKeys.TOUCH_JUMP, true);
                     break;
                 case MotionEvent.ACTION_UP:
                     who = "UP";
                     debugHub.setJump(false);
                     hudAxes.setJump(false);
+                    PlayInputRouter.feedTouchButton(world, InputKeys.TOUCH_JUMP, false);
                     break;
                 case MotionEvent.ACTION_CANCEL:
                     who = "CANCEL";
                     debugHub.setJump(false);
                     hudAxes.setJump(false);
+                    PlayInputRouter.feedTouchButton(world, InputKeys.TOUCH_JUMP, false);
                     break;
                 default:
                     break;
@@ -367,11 +371,17 @@ public final class VastHallActivity extends Activity implements
 
     private PlayHud buildPlayHud() {
         leftZone = new StickView(this, true);
-        leftZone.setListener(hudAxes::setMove);
+        leftZone.setListener((x, y) -> {
+            hudAxes.setMove(x, y);
+            PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_MOVE, x, y);
+        });
         leftZone.setProbe(this);
 
         rightZone = new StickView(this, false);
-        rightZone.setListener(hudAxes::setLook);
+        rightZone.setListener((x, y) -> {
+            hudAxes.setLook(x, y);
+            PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_LOOK, x, y);
+        });
         rightZone.setProbe(this);
 
         return new PlayHud(this, playInput, leftZone, rightZone, jump);
@@ -526,6 +536,9 @@ public final class VastHallActivity extends Activity implements
             hudAxes.setLook(0.0f, 0.0f);
             hudAxes.setJump(false);
         }
+        PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_MOVE, 0.0f, 0.0f);
+        PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_LOOK, 0.0f, 0.0f);
+        PlayInputRouter.feedTouchButton(world, InputKeys.TOUCH_JUMP, false);
         if (debugHub != null) {
             debugHub.setJump(false);
         }
@@ -858,7 +871,7 @@ public final class VastHallActivity extends Activity implements
         String modeBit = mode == null ? "" : "mode=" + mode.getClass().getSimpleName() + " ";
         engineMark.setText(String.format(
                 Locale.US,
-                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d audio=%d widgets=%d overlaps=%d  %s",
+                "SCENE %s%sactors=%d comps=%d assets=%d timers=%d events=%d saves=%d audio=%d widgets=%d overlaps=%d actions=%d  %s",
                 levelBit,
                 modeBit,
                 world.actorCount(),
@@ -870,12 +883,13 @@ public final class VastHallActivity extends Activity implements
                 world.audio().playingCount(),
                 world.viewport().viewportCount(),
                 world.collision().overlapCount(),
+                world.input().actionCount(),
                 beaconBit));
     }
 
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.29.0";
+        String version = "0.30.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
@@ -1122,10 +1136,12 @@ public final class VastHallActivity extends Activity implements
         }
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
             playInput.keyDown(keyCode);
+            PlayInputRouter.feedKey(world, keyCode, true);
             return true;
         }
         if (event.getAction() == KeyEvent.ACTION_UP) {
             playInput.keyUp(keyCode);
+            PlayInputRouter.feedKey(world, keyCode, false);
             return true;
         }
         return true;

@@ -11,7 +11,8 @@ import java.util.Map;
  *
  * <p>Does not package, cook, or stream bytes. It indexes handles
  * ({@link LevelDefinition}, {@link MeshHandle}, {@link TextureHandle},
- * {@link AudioHandle}) so gameplay code stops hardcoding one-off loads.
+ * {@link AudioHandle}, {@link InputMappingContext}) so gameplay code
+ * stops hardcoding one-off loads.
  */
 public final class AssetRegistry {
     public static final String HALL_LEVEL_ID = "Hall";
@@ -22,6 +23,8 @@ public final class AssetRegistry {
     public static final String HALL_BEACON_TEXTURE_PATH = "/Game/Textures/HallBeacon";
     public static final String HALL_AMBIENCE_ID = "HallAmbience";
     public static final String HALL_AMBIENCE_PATH = "/Game/Audio/HallAmbience";
+    public static final String DEFAULT_MAPPING_ID = "DefaultMapping";
+    public static final String DEFAULT_MAPPING_PATH = "/Game/Input/DefaultMapping";
 
     private final Map<String, Asset> byId = new LinkedHashMap<>();
     private final Map<String, String> aliasToId = new LinkedHashMap<>();
@@ -34,7 +37,7 @@ public final class AssetRegistry {
 
     /**
      * Built-in Hall sample: classpath {@code levels/Hall.json} plus mesh /
-     * texture / audio stubs for the native hall.
+     * texture / audio stubs and the default Input Mapping Context.
      */
     public void registerDemoAssets() {
         registerLevel(LevelDefinition.hall());
@@ -49,6 +52,11 @@ public final class AssetRegistry {
                 HALL_AMBIENCE_PATH,
                 AssetKind.AUDIO,
                 new AudioHandle(HALL_AMBIENCE_ID));
+        register(
+                DEFAULT_MAPPING_ID,
+                DEFAULT_MAPPING_PATH,
+                AssetKind.INPUT_MAPPING,
+                InputMappingContext.defaults());
     }
 
     public Asset registerLevel(LevelDefinition definition) {

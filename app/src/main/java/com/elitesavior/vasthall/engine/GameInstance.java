@@ -8,7 +8,7 @@ import java.util.List;
  * owns the {@link World}, {@link AssetRegistry}, {@link DeveloperConsole},
  * that world's {@link TimerManager}, {@link EventDispatcher},
  * {@link AudioManager}, {@link WidgetViewport}, {@link CollisionWorld},
- * and {@link SaveGameSystem} across level travel.
+ * {@link InputSubsystem}, and {@link SaveGameSystem} across level travel.
  * {@link GameMode} is created per {@link #openLevel}.
  *
  * <p>Startup flow: {@code Init} → {@link #init()} → {@link #openLevel(String)}
@@ -80,6 +80,14 @@ public final class GameInstance {
 
     public CollisionWorld collision() {
         return world.collision();
+    }
+
+    public InputSubsystem input() {
+        return world.input();
+    }
+
+    public PlayerController playerController() {
+        return world.playerController();
     }
 
     public SaveGameSystem saves() {

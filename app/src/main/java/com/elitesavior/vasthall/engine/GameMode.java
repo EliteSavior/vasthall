@@ -77,6 +77,14 @@ public class GameMode {
         return world == null ? null : world.viewport();
     }
 
+    public InputSubsystem input() {
+        return world == null ? null : world.input();
+    }
+
+    public PlayerController playerController() {
+        return world == null ? null : world.playerController();
+    }
+
     public int initCount() {
         return initCount;
     }

@@ -223,6 +223,8 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("world.audio=0"));
         assertTrue(dump.contains("world.widgets=1"));
         assertTrue(dump.contains("world.overlaps=0"));
+        assertTrue(dump.contains("world.actions=3"));
+        assertTrue(dump.contains("world.contexts=1"));
     }
 
     @Test
