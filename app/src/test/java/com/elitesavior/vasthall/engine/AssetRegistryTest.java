@@ -63,7 +63,7 @@ public final class AssetRegistryTest {
     public void registerDemoAssetsIncludesHallLevelAndStubs() {
         registry.registerDemoAssets();
 
-        assertTrue(registry.size() >= 4);
+        assertTrue(registry.size() >= 5);
         LevelDefinition hall = registry.findLevel("Hall");
         assertNotNull(hall);
         assertEquals("Hall", hall.name());
@@ -84,6 +84,11 @@ public final class AssetRegistryTest {
         assertEquals(AssetKind.AUDIO, audio.kind());
         assertSame(audio, registry.find(AssetRegistry.HALL_AMBIENCE_PATH));
         assertNotNull(audio.as(AudioHandle.class));
+
+        Asset mapping = registry.require(AssetRegistry.DEFAULT_MAPPING_ID);
+        assertEquals(AssetKind.INPUT_MAPPING, mapping.kind());
+        assertSame(mapping, registry.find(AssetRegistry.DEFAULT_MAPPING_PATH));
+        assertNotNull(mapping.as(InputMappingContext.class));
     }
 
     @Test
@@ -183,5 +188,6 @@ public final class AssetRegistryTest {
         assertTrue(dump.contains("kind=MESH"));
         assertTrue(dump.contains("kind=TEXTURE"));
         assertTrue(dump.contains("kind=AUDIO"));
+        assertTrue(dump.contains("kind=INPUT_MAPPING"));
     }
 }

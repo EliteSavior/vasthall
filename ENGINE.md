@@ -1,6 +1,6 @@
-# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Collision / Scene / Actor / Level / Component / Asset / Console)
+# Vast Hall engine (GameInstance / GameMode / TimerManager / Events / SaveGame / Audio / Widget / Collision / Input / Scene / Actor / Level / Component / Asset / Console)
 
-Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, a WidgetViewport, and a CollisionWorld; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport; CollisionComponents are AABBs or spheres swept for Begin/End Overlap**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer. Collision is CPU overlap only — no PhysX, no rigid-body solve.
+Unreal mental model: **GameInstance owns long-lived services; OpenLevel selects a GameMode; the World owns Actors, a TimerManager, a multicast EventDispatcher, an AudioManager, a WidgetViewport, a CollisionWorld, and an InputSubsystem; Actors own Components; named Levels stream into the World; the Asset Registry is the Content Browser–lite index; SaveGame snapshots a small JSON payload into a named slot; AudioManager plays registered `AUDIO` assets by id; widgets are CreateWidget then AddToViewport; CollisionComponents are AABBs or spheres swept for Begin/End Overlap; named InputActions (Jump / Move / Look) are mapped from keys, touch, and gamepad stubs**. You do not `new` an actor and hope it ticks. You spawn it into a `World` (or load a level that does), which calls `beginPlay`, ticks it each frame, and calls `endPlay` on destroy. Destroying an actor detaches its components. You do not hardcode a one-off classpath read for each mesh or map — you register it, then look it up by id or path. Timers are tick-driven (`SetTimer`), not a second thread. Gameplay listeners use typed multicast delegates (`bind` / `unbind` / `broadcast`), not a Blueprint Event Dispatcher UI. Saves are slot files (`CreateSaveGameObject` / `SaveGameToSlot` / `LoadGameFromSlot`), not a full native serializer. Sounds are `PlaySound` / `PlaySound2D` against the Asset Registry, not a MediaPlayer one-off. UI is UMG-lite: create a `Widget`, add it to the viewport, hide it, or `RemoveFromParent` — not a Widget Blueprint designer. Collision is CPU overlap only — no PhysX, no rigid-body solve. Input is Enhanced Input–lite: bind named actions on `PlayerController` / `GameMode`, do not hardcode Activity key codes.
 
 Native hall rendering and locomotion still live in `libvasthall.so`. This Java layer is the gameplay object model those natives can later attach to. **Transform stays on the Actor** (`actor.transform()`), not on a component — same as Unreal's root transform on `AActor`.
 
@@ -8,8 +8,8 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
-| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, AudioManager, WidgetViewport, SaveGameSystem across travel |
-| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds + sample HUD widget |
+| `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, AudioManager, WidgetViewport, CollisionWorld, InputSubsystem, SaveGameSystem across travel |
+| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds + sample HUD widget + Jump/Move/Look binds |
 | `TimerManager` / `TimerHandle` | `FTimerManager` / `FTimerHandle` | SetTimer by delay, loop, clear, pause/unpause |
 | `EventDispatcher` / `MulticastDelegate` / `DelegateHandle` | Event Dispatcher / `FMulticastDelegate` / `FDelegateHandle` | Typed bind / unbind / broadcast |
 | `EventType` | declared multicast / gameplay-message tag | `LevelLoaded`, `ActorSpawned`, … or `EventType.of(name, payload)` |
@@ -27,10 +27,13 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | `WidgetViewport` / `WidgetHost` | game viewport + AddToViewport | Named HUD slots; silent host or Android overlay |
 | `CollisionComponent` / `Aabb` | `UPrimitiveComponent` collision | Box or sphere on an actor; world AABB / sphere (rotation ignored) |
 | `CollisionWorld` / `OverlapEvent` | overlap queries + Begin/End Overlap | Sweep registry; enter/exit on the event bus |
-| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` / `getCollisionWorld` / `queryOverlaps` / `isOverlapping` / `overlapCount` |
+| `InputAction` / `InputMappingContext` | `UInputAction` / `UInputMappingContext` | Named Jump / Move / Look plus key/touch/gamepad maps |
+| `InputSubsystem` | Enhanced Input subsystem | Inject keys/axes; dispatch Started / Triggered / Completed |
+| `PlayerController` | thin `APlayerController` | Bind named actions without Activity key codes |
+| `GameplayStatics` | `UGameplayStatics` | `loadLevel` / `unloadLevel` / `openLevel` / `getGameInstance` / `getGameMode` / `getTimerManager` / `setTimer` / `getEventDispatcher` / `bindEvent` / `findAsset` / `loadAsset` / `createSaveGame` / `saveGameToSlot` / `loadGameFromSlot` / `doesSaveGameExist` / `deleteGameInSlot` / `playSound2D` / `stopSound` / `setMasterVolume` / `createWidget` / `addToViewport` / `removeFromParent` / `showWidget` / `hideWidget` / `getCollisionWorld` / `queryOverlaps` / `isOverlapping` / `overlapCount` / `getInputSubsystem` / `getPlayerController` / `bindAction` / `injectKey` / `injectAxis` / `actionValue` |
 | `AssetRegistry` | `UAssetManager` / Asset Registry | Register and look up content by id or path |
 | `Asset` | registry row + loaded handle | `id`, `path`, `kind`, payload |
-| `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO` |
+| `AssetKind` | asset class | `LEVEL`, `MESH`, `TEXTURE`, `AUDIO`, `INPUT_MAPPING` |
 | `MeshHandle` / `TextureHandle` / `AudioHandle` | stub `UObject`s | Named handles (no cook/decode yet) |
 | `DeveloperConsole` | `~` console | Register and run named commands |
 | `PlayerPawn` | default pawn | Java handle for the native player avatar (tick off) |
@@ -43,7 +46,7 @@ Package: `com.elitesavior.vasthall.engine`.
 Unreal names, in order:
 
 1. **Init** — construct the long-lived `GameInstance` (`GameInstance.withDemoAssets()`) and call `init()`.
-2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, `WidgetViewport`, `CollisionWorld`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
+2. **GameInstance** — owns one `World`, that world's `AssetRegistry`, `TimerManager`, `EventDispatcher`, `AudioManager`, `WidgetViewport`, `CollisionWorld`, `InputSubsystem`, a `SaveGameSystem`, and a `DeveloperConsole` bound to the world. Those objects survive map travel.
 3. **OpenLevel** — `game.openLevel("Hall")` (or `GameplayStatics.openLevel(game, "Hall")`). Same-world travel: unload loaded streaming levels, then load the named map.
 4. **GameMode** — after the map streams in, GameInstance constructs the mode from the level's `gameMode` field (or the instance default, `HallGameMode`), then `initGame` → `startPlay`. `startPlay` spawns `defaultPawnClass()` only if the world has none.
 
@@ -64,6 +67,8 @@ game.events();                          // same EventDispatcher (on the World)
 game.audio();                           // same AudioManager (on the World)
 game.viewport();                        // same WidgetViewport (on the World)
 game.collision();                       // same CollisionWorld (on the World)
+game.input();                           // same InputSubsystem (on the World)
+game.playerController();                // same local PlayerController
 game.saves();                           // same SaveGameSystem (slot directory)
 game.gameMode();                        // HallGameMode for Hall.json
 ```
@@ -168,7 +173,7 @@ world.registerLevel(LevelDefinition.named("Arena").gameMode("ArenaGameMode"));
 game.openLevel("Arena");
 ```
 
-`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. `HallGameMode.startPlay` also sets a one-shot `TimerManager` hook after `HallGameMode.DELAYED_START_SECONDS` (0.25s), binds `ActorSpawned` / `LevelUnloaded` (cleared in `endPlay`), and `CreateWidget`s a sample `TextWidget` `HallTitle` (`HALL`) then `AddToViewport`. PlayerController / GameState / a UMG designer are out of scope this version.
+`GameMode.endPlay` runs when GameInstance travels or unloads the last streaming level. A pawn spawned by `startPlay` is bound to the current loaded map so the next `openLevel` destroys it with that map. `openLevel` rejects an unknown name before tearing down the current mode. `HallGameMode.startPlay` also sets a one-shot `TimerManager` hook after `HallGameMode.DELAYED_START_SECONDS` (0.25s), binds `ActorSpawned` / `LevelUnloaded` (cleared in `endPlay`), `CreateWidget`s a sample `TextWidget` `HallTitle` (`HALL`) then `AddToViewport`, and binds Jump / Move / Look on `playerController()`. GameState / a full Unreal PlayerController possession graph / a UMG designer are out of scope this version.
 
 ## TimerManager
 
@@ -481,6 +486,81 @@ DebugDrawOverlaps 1
 
 Names are case-insensitive (`listoverlaps` / `overlaps` / `debugdrawoverlaps`). `DebugDrawOverlaps` is a dump/stat stub (`debugDraw=0|1`); nothing is drawn in the native hall.
 
+## Input Action mapping
+
+Unreal mental model: **Enhanced Input–lite**. You declare named `InputAction`s (`Jump`, `Move`, `Look`), put key / touch / gamepad-stub mappings in an `InputMappingContext`, and bind callbacks on `PlayerController` or `GameMode`. The Activity still owns the existing stick machine and JNI path; it also *feeds* this layer. Do not hardcode `KeyEvent` ints in GameMode.
+
+Default asset: `app/src/main/resources/input/DefaultMapping.json` (registry id `DefaultMapping`, path `/Game/Input/DefaultMapping`). Every `World` loads that context at construction. Native locomotion is unchanged — this is a mapping / dispatch API on top.
+
+```java
+import com.elitesavior.vasthall.engine.GameplayStatics;
+import com.elitesavior.vasthall.engine.InputAction;
+import com.elitesavior.vasthall.engine.InputActionValue;
+import com.elitesavior.vasthall.engine.InputKeys;
+import com.elitesavior.vasthall.engine.InputTrigger;
+import com.elitesavior.vasthall.engine.PlayerController;
+
+public class ArenaGameMode extends GameMode {
+    @Override
+    public void startPlay() {
+        super.startPlay();
+        PlayerController pc = playerController();
+        pc.bindAction(InputAction.JUMP, InputTrigger.STARTED, this::onJump);
+        pc.bindAction(InputAction.JUMP, InputTrigger.COMPLETED, this::onJumpReleased);
+        pc.bindAxis(InputAction.MOVE, this::onMove);
+        pc.bindAxis(InputAction.LOOK, this::onLook);
+    }
+
+    private void onJump(InputActionValue value) { /* started */ }
+    private void onJumpReleased(InputActionValue value) { /* completed */ }
+    private void onMove(InputActionValue value) { /* value.x(), value.y() */ }
+    private void onLook(InputActionValue value) { /* look axes */ }
+}
+
+GameplayStatics.injectKey(world, InputKeys.SPACE, true);   // tests / Activity
+GameplayStatics.injectAxis(world, InputKeys.TOUCH_MOVE, 0.2f, 0.8f);
+GameplayStatics.actionValue(world, InputAction.JUMP).isPressed();
+```
+
+| Call | What it does |
+| --- | --- |
+| `bindAction(name, STARTED\|TRIGGERED\|COMPLETED, cb)` | Fire on press, value change, or release |
+| `bindAxis(name, cb)` | `TRIGGERED` helper for Move / Look |
+| `injectKey(key, down)` | Digital key, `Touch.Jump`, `Gamepad.FaceButtonBottom` |
+| `injectAxis(key, x, y)` | `Touch.Move` / `Touch.Look` / gamepad stick stubs |
+| `actionValue(name)` | Current digital / axis2d value |
+| `addMappingContext` | Stack another context (tests / extra maps) |
+
+Triggers: **Started** when an action leaves idle, **Triggered** on that first sample and later value changes, **Completed** when it returns to idle. WASD / arrows accumulate into Move. Multiple 2D sources (touch + gamepad stub) sum.
+
+### How to add an action
+
+1. Declare it in `input/DefaultMapping.json` under `actions` (`name` + `valueType`: `DIGITAL`, `AXIS1D`, or `AXIS2D`).
+2. Add `mappings` rows: `{ "action": "Sprint", "key": "LeftShift" }` for digital, or `{ "action": "Move", "key": "W", "axis": "Y", "scale": 1 }` for a key that contributes to an axis.
+3. If it is a new hardware key, add the name + Android key-code row in `InputKeys`.
+4. Bind it from GameMode / PlayerController (`bindAction` / `bindAxis`). Do not switch on Activity key codes.
+5. Feed it from the Activity (or a test) with `injectKey` / `injectAxis` / `PlayInputRouter`. The existing `PlayInputMachine` / stick lockup path stays as-is.
+
+```json
+{ "name": "Sprint", "valueType": "DIGITAL" }
+```
+
+```json
+{ "action": "Sprint", "key": "LeftShift" }
+```
+
+```java
+playerController().bindAction("Sprint", InputTrigger.STARTED, v -> startSprint());
+```
+
+`HallGameMode` binds Jump / Move / Look as the sample. Console demo (fossDebug `~`):
+
+```
+input
+```
+
+Names are case-insensitive (`input`). The listing shows contexts, mappings, and current action values.
+
 ## Register and load an asset
 
 Unreal Content Browser mental model, without an editor: every piece of content has a **short id** and a **path**. Register once on the world's `AssetRegistry`. Look up later by either key. Missing names return null (`find`) or throw `unknown asset` (`require` / `GameplayStatics.loadAsset`).
@@ -493,6 +573,7 @@ Paths look like classpath files or `/Game/...` object paths:
 | `MESH` | `HallMesh` | `/Game/Meshes/Hall` | `MeshHandle` stub for the native hall mesh |
 | `TEXTURE` | `HallBeaconTexture` | `/Game/Textures/HallBeacon` | `TextureHandle` stub |
 | `AUDIO` | `HallAmbience` | `/Game/Audio/HallAmbience` | `AudioHandle` stub |
+| `INPUT_MAPPING` | `DefaultMapping` | `/Game/Input/DefaultMapping` | `InputMappingContext` from `input/DefaultMapping.json` |
 
 ```java
 import com.elitesavior.vasthall.engine.Asset;
@@ -561,6 +642,7 @@ console.exec("AddToViewport Hint");
 console.exec("widgets");
 console.exec("ListOverlaps");
 console.exec("DebugDrawOverlaps 1");
+console.exec("input");
 console.register("ping", "Echo ping", (bound, args) -> "pong");
 ```
 
@@ -572,7 +654,7 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `load <name>` (`loadlevel`) | `GameplayStatics.loadLevel` (id or path) |
 | `unload <name>` (`unloadlevel`) | `GameplayStatics.unloadLevel` |
 | `open <name>` (`openlevel`) | `GameplayStatics.openLevel` (same-world travel) |
-| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=… widgets=… overlaps=…` |
+| `stat` | `actors=… levels=… assets=… frame=… mode=… timers=… events=… saves=… audio=… widgets=… overlaps=… actions=…` |
 | `settimer <seconds> [once\|loop] [message]` | `SetTimer` — delayed console log |
 | `cleartimer [id]` | `ClearTimer` (last handle if id omitted) |
 | `timers` | List active TimerManager entries |
@@ -590,6 +672,7 @@ console.register("ping", "Echo ping", (bound, args) -> "pong");
 | `widgets` | List WidgetViewport names / visibility |
 | `listoverlaps` (`overlaps`) | List current CollisionWorld pairs |
 | `debugdrawoverlaps <0\|1>` | Stub debug-draw flag |
+| `input` | List InputAction values and mapping contexts |
 
 Names are case-insensitive. Unknown names return `unknown command`. Level commands that throw (`unknown level`, missing name) return `error: …`.
 
@@ -726,7 +809,7 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn` + box `CollisionComponent`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon` + box `CollisionComponent`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=4 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=5 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0 actions=3  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). `actions=3` is Jump / Move / Look on the default Input Mapping Context. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps` / `input`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -740,11 +823,14 @@ world.events=8
 world.audio=0
 world.widgets=1
 world.overlaps=0 debugDraw=0
-world.assets=4
+world.actions=3
+world.contexts=1
+world.assets=5
 asset id=Hall path=levels/Hall.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
 asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
 asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO
+asset id=DefaultMapping path=/Game/Input/DefaultMapping kind=INPUT_MAPPING
 level=Hall actors=2
 actor id=1 name=PlayerPawn class=PlayerPawn level=Hall tick=0 loc=0.0000,0.0000,0.0000 … components=2
   component class=TagComponent tick=0 tags=pawn
@@ -762,9 +848,10 @@ actor id=2 name=HallBeacon class=HallBeaconActor level=Hall tick=1 loc=0.0000,1.
 - Networking / cloud saves
 - Native mesh spawn through JNI
 - Full serialization of native renderer state
-- Input / stick lockup changes
+- Input / stick lockup changes (this layer feeds named actions; it does not rewrite the stick machine)
+- A full Enhanced Input graph editor / IMC modifier stack / chorded actions
 - Seamless travel / a second `World` instance / multiplayer
-- A full Unreal Editor GameMode UI / PlayerController / GameState
+- A full Unreal Editor GameMode UI / possession graph / GameState
 - Component replication / Blueprint components
 - A `TransformComponent` (transform is already on `Actor`)
 - Spatial / 3D audio, attenuation, FMOD, MediaPlayer / SoundPool hardware decode

@@ -21,6 +21,7 @@ import java.util.Map;
  * {@link #audio()} is the world's {@code UAudioDevice}-lite mixer.
  * {@link #viewport()} is the world's UMG-lite widget host.
  * {@link #collision()} is the world's overlap registry.
+ * {@link #input()} is the world's Enhanced Input–lite action map.
  *
  * <p>Single-threaded: call spawn / destroy / tick / load from the same thread
  * (the activity frame callback).
@@ -37,6 +38,8 @@ public final class World {
     private final AudioManager audio;
     private final WidgetViewport viewport = new WidgetViewport();
     private final CollisionWorld collision;
+    private final InputSubsystem input;
+    private final PlayerController playerController;
     private final Map<String, Level> loaded = new LinkedHashMap<>();
     private GameInstance gameInstance;
     private GameMode gameMode;
@@ -52,6 +55,9 @@ public final class World {
         this.assets = assets == null ? new AssetRegistry() : assets;
         this.audio = new AudioManager(this.assets);
         this.collision = new CollisionWorld(this);
+        this.input = new InputSubsystem(this);
+        this.playerController = new PlayerController(this.input);
+        this.input.addMappingContext(InputMappingContext.defaults());
     }
 
     public AssetRegistry assets() {
@@ -84,6 +90,14 @@ public final class World {
 
     public CollisionWorld collision() {
         return collision;
+    }
+
+    public InputSubsystem input() {
+        return input;
+    }
+
+    public PlayerController playerController() {
+        return playerController;
     }
 
     void bindGameInstance(GameInstance gameInstance) {
@@ -392,6 +406,7 @@ public final class World {
         audio.appendDump(out);
         viewport.appendDump(out);
         collision.appendDump(out);
+        input.appendDump(out);
         assets.appendDump(out);
         for (Level level : loaded.values()) {
             out.append("level=").append(level.name())

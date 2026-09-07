@@ -37,8 +37,10 @@ public final class GameInstanceTest {
         assertSame(game.events(), game.world().events());
         assertSame(game.audio(), game.world().audio());
         assertSame(game.collision(), game.world().collision());
+        assertSame(game.input(), game.world().input());
+        assertSame(game.playerController(), game.world().playerController());
         assertEquals(6, game.events().listenerCount());
-        assertEquals(4, game.assets().size());
+        assertEquals(5, game.assets().size());
         assertNull(game.gameMode());
     }
 
@@ -92,7 +94,7 @@ public final class GameInstanceTest {
         assertEquals(1, hallMode.endCount());
         assertTrue(game.gameMode() instanceof HallGameMode);
         assertTrue(console.log().get(0).startsWith("> stat"));
-        assertEquals(4 + 1, assets.size());
+        assertEquals(5 + 1, assets.size());
 
         assertTrue(game.unloadLevel("Side"));
         assertFalse(world.isLevelLoaded("Side"));
@@ -223,6 +225,8 @@ public final class GameInstanceTest {
         assertTrue(dump.contains("world.audio=0"));
         assertTrue(dump.contains("world.widgets=1"));
         assertTrue(dump.contains("world.overlaps=0"));
+        assertTrue(dump.contains("world.actions=3"));
+        assertTrue(dump.contains("world.contexts=1"));
     }
 
     @Test

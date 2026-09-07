@@ -8,8 +8,9 @@ package com.elitesavior.vasthall.engine;
  * <p>{@link #startPlay()} schedules a one-shot {@link TimerManager} hook
  * after {@link #DELAYED_START_SECONDS} as the sample delayed-start use,
  * binds multicast listeners for later actor-spawn / level-unload
- * engine events, and adds a sample {@link TextWidget} to the viewport
- * ({@code CreateWidget} + {@code AddToViewport}).
+ * engine events, adds a sample {@link TextWidget} to the viewport
+ * ({@code CreateWidget} + {@code AddToViewport}), and binds Jump / Move /
+ * Look on the local {@link PlayerController}.
  */
 public class HallGameMode extends GameMode {
     public static final float DELAYED_START_SECONDS = 0.25f;
@@ -19,10 +20,18 @@ public class HallGameMode extends GameMode {
     private TimerHandle delayedStart;
     private DelegateHandle actorSpawned;
     private DelegateHandle levelUnloaded;
+    private DelegateHandle jumpStarted;
+    private DelegateHandle jumpCompleted;
+    private DelegateHandle moveTriggered;
+    private DelegateHandle lookTriggered;
     private TextWidget sampleWidget;
+    private InputActionValue lastMove = InputActionValue.axis2D(0.0f, 0.0f);
+    private InputActionValue lastLook = InputActionValue.axis2D(0.0f, 0.0f);
     private int delayedStartCount;
     private int actorSpawnedCount;
     private int levelUnloadedCount;
+    private int jumpStartedCount;
+    private int jumpCompletedCount;
 
     @Override
     public void startPlay() {
@@ -37,6 +46,7 @@ public class HallGameMode extends GameMode {
             delayedStart = timers.setTimer(this::onDelayedStart, DELAYED_START_SECONDS, false);
         }
         addSampleWidget();
+        bindSampleActions();
     }
 
     @Override
@@ -54,6 +64,7 @@ public class HallGameMode extends GameMode {
         }
         delayedStart = null;
         destroySampleWidget();
+        unbindSampleActions();
         super.endPlay();
     }
 
@@ -71,6 +82,22 @@ public class HallGameMode extends GameMode {
 
     public TextWidget sampleWidget() {
         return sampleWidget;
+    }
+
+    public int jumpStartedCount() {
+        return jumpStartedCount;
+    }
+
+    public int jumpCompletedCount() {
+        return jumpCompletedCount;
+    }
+
+    public InputActionValue lastMove() {
+        return lastMove;
+    }
+
+    public InputActionValue lastLook() {
+        return lastLook;
     }
 
     private void addSampleWidget() {
@@ -93,6 +120,33 @@ public class HallGameMode extends GameMode {
             host.destroyWidget(sampleWidget);
         }
         sampleWidget = null;
+    }
+
+    private void bindSampleActions() {
+        PlayerController controller = playerController();
+        if (controller == null) {
+            return;
+        }
+        jumpStarted = controller.bindAction(
+                InputAction.JUMP, InputTrigger.STARTED, value -> jumpStartedCount++);
+        jumpCompleted = controller.bindAction(
+                InputAction.JUMP, InputTrigger.COMPLETED, value -> jumpCompletedCount++);
+        moveTriggered = controller.bindAxis(InputAction.MOVE, value -> lastMove = value);
+        lookTriggered = controller.bindAxis(InputAction.LOOK, value -> lastLook = value);
+    }
+
+    private void unbindSampleActions() {
+        PlayerController controller = playerController();
+        if (controller != null) {
+            controller.unbind(jumpStarted);
+            controller.unbind(jumpCompleted);
+            controller.unbind(moveTriggered);
+            controller.unbind(lookTriggered);
+        }
+        jumpStarted = null;
+        jumpCompleted = null;
+        moveTriggered = null;
+        lookTriggered = null;
     }
 
     private void onDelayedStart() {

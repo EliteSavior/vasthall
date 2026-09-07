@@ -147,7 +147,7 @@ public final class DeveloperConsole {
         register("unloadlevel", "Alias for unload", this::unloadCommand);
         register("open", "OpenLevel <name> (same-world travel)", this::openCommand);
         register("openlevel", "Alias for open", this::openCommand);
-        register("stat", "World actor/level/asset/frame/mode/timer/audio/widget/overlap counts", this::statCommand);
+        register("stat", "World actor/level/asset/frame/mode/timer/audio/widget/overlap/action counts", this::statCommand);
         register("settimer", "SetTimer <seconds> [once|loop] [message]", this::setTimerCommand);
         register("cleartimer", "ClearTimer [id] (last if omitted)", this::clearTimerCommand);
         register("timers", "List active TimerManager timers", this::timersCommand);
@@ -167,6 +167,7 @@ public final class DeveloperConsole {
         register("listoverlaps", "List current CollisionWorld overlap pairs", this::listOverlapsCommand);
         register("overlaps", "Alias for listoverlaps", this::listOverlapsCommand);
         register("debugdrawoverlaps", "DebugDrawOverlaps <0|1> stub flag", this::debugDrawOverlapsCommand);
+        register("input", "List InputAction mappings and values", this::inputCommand);
         bindEngineEvents();
     }
 
@@ -263,7 +264,8 @@ public final class DeveloperConsole {
                 + " saves=" + saves
                 + " audio=" + live.audio().playingCount()
                 + " widgets=" + live.viewport().viewportCount()
-                + " overlaps=" + live.collision().overlapCount();
+                + " overlaps=" + live.collision().overlapCount()
+                + " actions=" + live.input().actionCount();
     }
 
     private String setTimerCommand(World bound, String[] args) {
@@ -481,6 +483,17 @@ public final class DeveloperConsole {
         }
         live.collision().setDebugDraw(enabled);
         return "debugDraw=" + (enabled ? 1 : 0);
+    }
+
+    private String inputCommand(World bound, String[] args) {
+        World live = requireWorld(bound);
+        InputSubsystem input = live.input();
+        StringBuilder out = new StringBuilder();
+        out.append("actions=").append(input.actionCount()).append('\n');
+        for (String line : input.describe()) {
+            out.append(line).append('\n');
+        }
+        return out.toString().trim();
     }
 
     private String eventsCommand(World bound, String[] args) {

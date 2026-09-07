@@ -26,7 +26,9 @@ import java.util.function.Consumer;
  * {@link #showWidget} / {@link #hideWidget} reach the world's
  * {@link WidgetViewport}. {@link #getCollisionWorld} /
  * {@link #queryOverlaps} / {@link #isOverlapping} reach the world's
- * {@link CollisionWorld}.
+ * {@link CollisionWorld}. {@link #getInputSubsystem} /
+ * {@link #getPlayerController} / {@link #bindAction} /
+ * {@link #injectKey} / {@link #injectAxis} reach Enhanced Input–lite.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -231,6 +233,38 @@ public final class GameplayStatics {
 
     public static int overlapCount(World world) {
         return getCollisionWorld(world).overlapCount();
+    }
+
+    public static InputSubsystem getInputSubsystem(World world) {
+        return requireWorld(world).input();
+    }
+
+    public static PlayerController getPlayerController(World world) {
+        return requireWorld(world).playerController();
+    }
+
+    public static DelegateHandle bindAction(
+            World world,
+            String action,
+            InputTrigger trigger,
+            Consumer<InputActionValue> listener) {
+        return getInputSubsystem(world).bindAction(action, trigger, listener);
+    }
+
+    public static void unbindAction(World world, DelegateHandle handle) {
+        getInputSubsystem(world).unbind(handle);
+    }
+
+    public static void injectKey(World world, String key, boolean down) {
+        getInputSubsystem(world).injectKey(key, down);
+    }
+
+    public static void injectAxis(World world, String key, float x, float y) {
+        getInputSubsystem(world).injectAxis(key, x, y);
+    }
+
+    public static InputActionValue actionValue(World world, String action) {
+        return getInputSubsystem(world).actionValue(action);
     }
 
     private static GameInstance requireGame(GameInstance game) {
