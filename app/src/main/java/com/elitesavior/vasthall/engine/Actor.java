@@ -78,6 +78,9 @@ public class Actor {
         if (component == null) {
             throw new IllegalArgumentException("component");
         }
+        if (pendingKill) {
+            throw new IllegalStateException("actor pending kill");
+        }
         if (component.owner() != null) {
             throw new IllegalStateException("component already attached");
         }

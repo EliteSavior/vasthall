@@ -129,7 +129,7 @@ import com.elitesavior.vasthall.engine.World;
 World world = new World();
 Actor crate = world.spawnActor(Actor.class, Transform.at(0.0f, 0.0f, 2.0f));
 
-// Constructor / beginPlay / after spawn — all fine
+// Constructor (onAttach may see owner().world() == null), beginPlay, or after spawn
 TagComponent tags = crate.addComponent(new TagComponent("pickup"));
 tags.addTag("crate");
 
@@ -157,6 +157,8 @@ Rules that match this engine:
 
 - One component instance belongs to at most one actor (`already attached` if you reuse it).
 - `getComponent(Class)` returns the **first** match; `components()` / `componentsOf` list them.
+- Constructor / `beginPlay` / after spawn are all valid times to `addComponent`. `onAttach` means “this actor owns you now.” If you add in a constructor (Hall’s `TagComponent`s do), `owner().world()` is still **null** until `World.spawnActor` finishes — do world lookups in actor `beginPlay`, not in `onAttach`.
+- `addComponent` throws after the actor is pending kill (`destroy` / `unloadLevel`).
 - Component `tick` runs only when the owner actor ticks (`setActorTickEnabled(true)`). `PlayerPawn` keeps actor tick off so Java movement cannot fight `libvasthall.so`.
 - `setComponentTickEnabled(false)` skips that component even if the actor ticks. `TagComponent` defaults to tick off.
 - Add/remove during `tick` is safe: the new component ticks next frame; a removed one does not finish this frame.

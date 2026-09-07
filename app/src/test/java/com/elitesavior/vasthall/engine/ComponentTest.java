@@ -217,15 +217,45 @@ public final class ComponentTest {
         assertTrue(dump.contains("vel=1.0000,0.0000,0.0000"));
     }
 
+    @Test
+    public void addComponentRejectedAfterDestroy() {
+        WorldTest.ProbeActor actor = world.spawnActor(WorldTest.ProbeActor.class);
+        assertTrue(world.destroyActor(actor));
+        try {
+            actor.addComponent(new ProbeComponent());
+            fail("expected pending kill");
+        } catch (IllegalStateException expected) {
+            assertTrue(expected.getMessage().contains("pending kill"));
+        }
+        assertEquals(0, actor.componentCount());
+    }
+
+    @Test
+    public void onAttachBeforeSpawnSeesNullWorld() {
+        ProbeComponent component = new ProbeComponent();
+        WorldTest.ProbeActor actor = new WorldTest.ProbeActor();
+        actor.addComponent(component);
+        assertSame(actor, component.owner());
+        assertNull(actor.world());
+        assertNull(component.worldAtAttach);
+
+        world.spawnActor(actor, Transform.identity());
+        assertSame(world, actor.world());
+        assertNull(component.worldAtAttach);
+    }
+
     public static final class ProbeComponent extends ActorComponent {
         int attachCount;
         int detachCount;
         int tickCount;
         float lastDt;
+        World worldAtAttach;
 
         @Override
         protected void onAttach() {
             attachCount++;
+            Actor owner = owner();
+            worldAtAttach = owner == null ? null : owner.world();
         }
 
         @Override
