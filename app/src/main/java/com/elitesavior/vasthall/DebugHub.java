@@ -4,6 +4,8 @@ import android.content.SharedPreferences;
 import android.os.SystemClock;
 import android.view.MotionEvent;
 
+import com.elitesavior.vasthall.engine.World;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -286,6 +288,16 @@ final class DebugHub {
             StickView left,
             StickView right,
             boolean jump) {
+        return buildDump(versionName, scheme, left, right, jump, null);
+    }
+
+    String buildDump(
+            String versionName,
+            String scheme,
+            StickView left,
+            StickView right,
+            boolean jump,
+            World world) {
         pruneZeros();
         StringBuilder out = new StringBuilder(2048);
         out.append("VASTHALL_DEBUG v1\n");
@@ -336,6 +348,9 @@ final class DebugHub {
             out.append("paused=").append(paused ? 1 : 0).append('\n');
             out.append("jniLagMs=").append(jniLagMs).append('\n');
             out.append("jniLagMaxMs=").append(jniLagMaxMs).append('\n');
+            if (world != null) {
+                world.appendDump(out);
+            }
         } else {
             out.append("skipped=off\n");
         }

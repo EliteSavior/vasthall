@@ -29,9 +29,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.elitesavior.vasthall.engine.HallBeaconActor;
+import com.elitesavior.vasthall.engine.PlayerPawn;
+import com.elitesavior.vasthall.engine.Transform;
+import com.elitesavior.vasthall.engine.World;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Locale;
 
 public final class VastHallActivity extends Activity implements
         SurfaceHolder.Callback,
@@ -62,6 +69,9 @@ public final class VastHallActivity extends Activity implements
     private boolean watchdogRunning;
     private HudAxes hudAxes;
     private DebugHub debugHub;
+    private World world;
+    private TextView engineMark;
+    private long lastWorldTickNs;
 
     private final Choreographer.FrameCallback watchdog = new Choreographer.FrameCallback() {
         @Override
@@ -75,6 +85,7 @@ public final class VastHallActivity extends Activity implements
             if (hudAxes != null) {
                 hudAxes.pulse();
             }
+            tickWorld(frameTimeNanos);
             if (debugHub != null) {
                 if (hudAxes != null) {
                     debugHub.setJniLagMs(hudAxes.jniLagMs());
@@ -253,6 +264,23 @@ public final class VastHallActivity extends Activity implements
         dbgLp.rightMargin = dp(12);
         root.addView(dbgMark, dbgLp);
 
+        engineMark = new TextView(this);
+        engineMark.setTextColor(0xccd4783a);
+        engineMark.setTextSize(11.0f);
+        engineMark.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        engineMark.setClickable(false);
+        engineMark.setFocusable(false);
+        engineMark.setFocusableInTouchMode(false);
+        engineMark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        engineMark.setPadding(dp(6), dp(2), dp(6), dp(2));
+        FrameLayout.LayoutParams engineLp =
+                new FrameLayout.LayoutParams(
+                        FrameLayout.LayoutParams.WRAP_CONTENT,
+                        FrameLayout.LayoutParams.WRAP_CONTENT);
+        engineLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        engineLp.topMargin = dp(10);
+        root.addView(engineMark, engineLp);
+
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getSystemWindowInsetTop();
             if (insets.getDisplayCutout() != null) {
@@ -262,6 +290,8 @@ public final class VastHallActivity extends Activity implements
             menuButton.setLayoutParams(menuLp);
             dbgLp.topMargin = dp(8) + top;
             dbgMark.setLayoutParams(dbgLp);
+            engineLp.topMargin = dp(8) + top;
+            engineMark.setLayoutParams(engineLp);
             return insets;
         });
 
@@ -280,9 +310,11 @@ public final class VastHallActivity extends Activity implements
 
         setContentView(root);
         nativeInit();
+        beginPlayWorld();
         hudAxes.start();
         applyScheme(dual, false);
         applyDbgMark();
+        updateEngineHud();
         debugHub.lifecycle("onCreate");
         root.requestApplyInsets();
         surface.requestFocus();
@@ -584,14 +616,59 @@ public final class VastHallActivity extends Activity implements
         }
     }
 
+    private void beginPlayWorld() {
+        world = new World();
+        world.spawnActor(PlayerPawn.class, Transform.identity());
+        world.spawnActor(HallBeaconActor.class, Transform.at(0.0f, HallBeaconActor.BASE_Y, 4.0f));
+        lastWorldTickNs = 0L;
+    }
+
+    private void tickWorld(long frameTimeNanos) {
+        if (world == null) {
+            return;
+        }
+        if (!menuOpen) {
+            float dt;
+            if (lastWorldTickNs == 0L) {
+                dt = 0.016f;
+            } else {
+                dt = (frameTimeNanos - lastWorldTickNs) / 1_000_000_000.0f;
+            }
+            lastWorldTickNs = frameTimeNanos;
+            world.tick(DebugHub.clampDt(dt));
+        }
+        updateEngineHud();
+    }
+
+    private void updateEngineHud() {
+        if (engineMark == null || world == null) {
+            return;
+        }
+        List<HallBeaconActor> beacons = world.actorsOf(HallBeaconActor.class);
+        String beaconBit = "-";
+        if (!beacons.isEmpty()) {
+            HallBeaconActor beacon = beacons.get(0);
+            beaconBit = String.format(
+                    Locale.US,
+                    "HallBeacon y=%.2f yaw=%.0f",
+                    beacon.transform().location.y,
+                    beacon.transform().rotation.yaw);
+        }
+        engineMark.setText(String.format(
+                Locale.US,
+                "SCENE actors=%d  %s",
+                world.actorCount(),
+                beaconBit));
+    }
+
     private String currentDump() {
         String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.17.0";
+        String version = "0.18.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        return debugHub.buildDump(version, scheme, leftZone, rightZone, debugHub.jumpDown());
+        return debugHub.buildDump(version, scheme, leftZone, rightZone, debugHub.jumpDown(), world);
     }
 
     private void copyDump() {
@@ -728,6 +805,9 @@ public final class VastHallActivity extends Activity implements
         }
         if (hudAxes != null) {
             hudAxes.stop();
+        }
+        if (world != null) {
+            world.destroyAll();
         }
         nativeStop();
         nativeShutdown();
