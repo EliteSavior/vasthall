@@ -9,6 +9,7 @@ package com.elitesavior.vasthall.engine;
  */
 public abstract class DataAsset {
     private final String name;
+    private final GameplayTagContainer gameplayTags = new GameplayTagContainer();
 
     protected DataAsset(String name) {
         if (name == null || name.trim().isEmpty()) {
@@ -24,5 +25,13 @@ public abstract class DataAsset {
     /** Unreal analog: the asset class name ({@code WeaponDataAsset}). */
     public String assetType() {
         return getClass().getSimpleName();
+    }
+
+    /**
+     * Hierarchical gameplay tags on this data object. Unreal analog:
+     * an {@code FGameplayTagContainer} property on a {@code UDataAsset}.
+     */
+    public GameplayTagContainer gameplayTags() {
+        return gameplayTags;
     }
 }

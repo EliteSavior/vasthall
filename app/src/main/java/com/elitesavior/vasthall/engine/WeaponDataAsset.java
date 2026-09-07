@@ -29,7 +29,9 @@ public final class WeaponDataAsset extends DataAsset {
 
     /** Built-in Hall sample: melee stub at {@code /Game/Data/HallBlade}. */
     public static WeaponDataAsset hallBlade() {
-        return new WeaponDataAsset("HallBlade", 25.0f, 0.4f, 1);
+        WeaponDataAsset blade = new WeaponDataAsset("HallBlade", 25.0f, 0.4f, 1);
+        blade.gameplayTags().addTag(GameplayTag.ITEM_WEAPON_MELEE);
+        return blade;
     }
 
     public float damage() {

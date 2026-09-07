@@ -226,6 +226,9 @@ public final class AssetRegistry {
             DataAsset data = asset.as(DataAsset.class);
             if (data != null) {
                 out.append(" type=").append(data.assetType());
+                if (!data.gameplayTags().isEmpty()) {
+                    out.append(" gtags=").append(data.gameplayTags().dump());
+                }
             }
             out.append('\n');
         }

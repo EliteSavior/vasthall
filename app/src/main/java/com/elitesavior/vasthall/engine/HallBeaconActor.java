@@ -23,6 +23,7 @@ public class HallBeaconActor extends Actor {
         setActorTickEnabled(true);
         addComponent(new TagComponent("beacon"));
         addComponent(new CollisionComponent().setBoxExtent(0.3f, 0.3f, 0.3f));
+        gameplayTags().addTag(GameplayTag.WORLD_LANDMARK_BEACON);
     }
 
     /** Texture resolved from the world registry in {@link #beginPlay()}. */

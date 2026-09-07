@@ -1,5 +1,6 @@
 package com.elitesavior.vasthall.engine;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -30,6 +31,8 @@ import java.util.function.Consumer;
  * {@link CollisionWorld}. {@link #getInputSubsystem} /
  * {@link #getPlayerController} / {@link #bindAction} /
  * {@link #injectKey} / {@link #injectAxis} reach Enhanced Input–lite.
+ * {@link #hasTag} / {@link #matches} / {@link #getActorsWithTag} query
+ * {@link GameplayTagContainer}s on Actors and DataAssets.
  */
 public final class GameplayStatics {
     private GameplayStatics() {
@@ -282,6 +285,44 @@ public final class GameplayStatics {
 
     public static InputActionValue actionValue(World world, String action) {
         return getInputSubsystem(world).actionValue(action);
+    }
+
+    public static boolean hasTag(Actor actor, String tag) {
+        return actor != null && actor.gameplayTags().hasTag(tag);
+    }
+
+    public static boolean hasTag(Actor actor, GameplayTag tag) {
+        return actor != null && actor.gameplayTags().hasTag(tag);
+    }
+
+    public static boolean hasTag(DataAsset asset, String tag) {
+        return asset != null && asset.gameplayTags().hasTag(tag);
+    }
+
+    public static boolean hasTag(DataAsset asset, GameplayTag tag) {
+        return asset != null && asset.gameplayTags().hasTag(tag);
+    }
+
+    public static boolean matches(Actor actor, GameplayTagQuery query) {
+        return actor != null && actor.gameplayTags().matches(query);
+    }
+
+    public static boolean matches(DataAsset asset, GameplayTagQuery query) {
+        return asset != null && asset.gameplayTags().matches(query);
+    }
+
+    public static List<Actor> getActorsWithTag(World world, String tag) {
+        return getActorsWithTag(requireWorld(world), GameplayTag.of(tag));
+    }
+
+    public static List<Actor> getActorsWithTag(World world, GameplayTag tag) {
+        List<Actor> matched = new ArrayList<>();
+        for (Actor actor : requireWorld(world).actors()) {
+            if (actor.gameplayTags().hasTag(tag)) {
+                matched.add(actor);
+            }
+        }
+        return matched;
     }
 
     private static GameInstance requireGame(GameInstance game) {
