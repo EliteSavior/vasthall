@@ -3,15 +3,15 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.35-hall`
-- Source version: `0.35.0` (debug HUD + MOTION_CORR flight recorder on the v0.34 New pad tip; no stick-ownership change; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (504942 bytes, md5 `aedc258f6a416631acaeb330c2b7b48c`)
+- Tag: `v0.36-hall`
+- Source version: `0.36.0` (New pad stale-sample age-out while owners live, on the v0.35 motion-corr tip; see [ENGINE.md](ENGINE.md))
+- File: `VastHall-v0-foss.apk` (509602 bytes, md5 `2e23eae476f735cb54f26fc6dc45cc83`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.35-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.36-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.35-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.36-hall/VastHall-v0-foss.apk
 
 Clean install (signing may differ from older drops):
 
@@ -21,7 +21,7 @@ adb uninstall com.elitesavior.vasthall && adb install VastHall-v0-foss.apk
 
 This repo is the public sideload drop.
 
-Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router with exclusive pointer-focus ownership (one `ownerPointerId` per Move/Look/Jump), CANCEL-complete JNI zero flush, and tick sample timeout/decay. Legacy touch and Legacy pad keep their existing backends. v0.35 does not change those algorithms; it adds input↔motion debug so a sticky-circle repro can be shared as evidence.
+Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router with exclusive pointer-focus ownership (one `ownerPointerId` per Move/Look/Jump), CANCEL-complete JNI zero flush, empty-set TIMEOUT/LAG, and **stale-sample age-out while owners stay live** (identical MOVE + climbing `jniLag` no longer republishes a frozen full-deflection vector). Legacy touch and Legacy pad keep their existing backends.
 
 ## Debug overlay and sticky repro dump
 
@@ -36,7 +36,7 @@ Menu → **Debug** → enable **Debug ON** (master). Leave Controls / Camera / I
 - Cyan vs amber arrows: commanded move vs consumed move; look stick vs dYaw/dPitch
 - Sparklines: inputMagL / velMag / lookRate (~2–3 s)
 
-To capture a sticky-circle dump: turn Debug ON, reproduce the circular multitouch latch, then Menu → Debug → **Share dump** (or Copy dump). If `INPUT_ZERO_MOTION_NONZERO` holds >200 ms (or stale axes >150 ms) the ring is frozen automatically and `[LOCKUP]` gets `why=MOTION_WITHOUT_INPUT` or `STALE_AXIS`. The share text keeps `[CONTROLS]/[CAMERA]/[INPUT_LOG]` and adds `[MOTION_CORR]` (CSV ring + headings) and `[LATCH_SUMMARY]`.
+To capture a sticky-circle dump: turn Debug ON, reproduce the circular multitouch latch, then Menu → Debug → **Share dump** (or Copy dump). The ring freezes automatically on `INPUT_ZERO_MOTION_NONZERO` >200 ms, stale axes >150 ms, or the v0.35 dump class (identical samples + climbing `jniLag` while owners live → `why=IDENTICAL_SAMPLE`). Freeze is sticky so Share after Menu still includes the latch window; `OPEN_MENU` is not stamped onto every later MOTION_CORR row. The share text keeps `[CONTROLS]/[CAMERA]/[INPUT_LOG]` and adds `[MOTION_CORR]` (CSV ring + headings) and `[LATCH_SUMMARY]`.
 
 ## Build this source
 
