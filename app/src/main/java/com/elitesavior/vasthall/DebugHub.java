@@ -85,6 +85,21 @@ final class DebugHub {
     private long lastMoveLogR = -MOVE_LOG_MIN_MS;
     private long jniLagMs;
     private long jniLagMaxMs;
+    private final MotionCorr.Ring motionRing = new MotionCorr.Ring();
+    private final MotionCorr.LatchWatch latchWatch = new MotionCorr.LatchWatch();
+    private final MotionCorr.Spark sparkInput = new MotionCorr.Spark();
+    private final MotionCorr.Spark sparkVel = new MotionCorr.Spark();
+    private final MotionCorr.Spark sparkLook = new MotionCorr.Spark();
+    private final List<String> motionLockups = new ArrayList<>();
+    private long lastMotionMs = -1L;
+    private long lastSparkMs = -1L;
+    private float motionYaw;
+    private float motionPitch;
+    private float pawnX;
+    private float pawnZ;
+    private String lastWhoZeroed = "";
+    private MotionCorr.Sample lastMotion;
+    private volatile HudSnapshot hudSnapshot = HudSnapshot.empty();
 
     DebugHub(SharedPreferences prefs) {
         this.prefs = prefs;
@@ -139,6 +154,18 @@ final class DebugHub {
         inputLog.clear();
         zeros.clear();
         lifecycle.clear();
+        motionRing.clear();
+        latchWatch.clear();
+        sparkInput.clear();
+        sparkVel.clear();
+        sparkLook.clear();
+        motionLockups.clear();
+        lastMotion = null;
+        pawnX = 0.0f;
+        pawnZ = 0.0f;
+        motionYaw = 0.0f;
+        motionPitch = 0.0f;
+        hudSnapshot = HudSnapshot.empty();
     }
 
     void setJniLagMs(long lagMs) {
@@ -162,6 +189,7 @@ final class DebugHub {
 
     void setPaused(boolean paused) {
         this.paused = paused;
+        latchWatch.onPause(paused);
     }
 
     void setCapture(boolean capture) {
@@ -203,6 +231,7 @@ final class DebugHub {
         if (!on()) {
             return;
         }
+        lastWhoZeroed = reason == null ? "" : reason;
         ZeroEvent event = new ZeroEvent(tMs(), reason, reason, zone, ax, ay);
         zeros.addLast(event);
         pruneZeros();
@@ -270,6 +299,110 @@ final class DebugHub {
         yaw += ax * LOOK_SENS * dt;
         pitch += ay * LOOK_SENS * dt;
         pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, pitch));
+    }
+
+    void tickMotion(MotionFrame frame) {
+        if (!on() || frame == null) {
+            hudSnapshot = HudSnapshot.empty();
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        float dt = lastMotionMs < 0L ? DT_MIN : clampDt((now - lastMotionMs) / 1000.0f);
+        lastMotionMs = now;
+
+        float[] look = lookDelta(frame.conLookX, frame.conLookY, dt);
+        float dYaw = look[0];
+        float dPitch = look[1];
+        if (!paused) {
+            motionYaw += dYaw;
+            motionPitch += dPitch;
+            motionPitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, motionPitch));
+        }
+
+        float sin = (float) Math.sin(motionYaw);
+        float cos = (float) Math.cos(motionYaw);
+        float velX = frame.conMoveX * cos + frame.conMoveY * sin;
+        float velZ = -frame.conMoveX * sin + frame.conMoveY * cos;
+        if (!paused) {
+            pawnX += velX * dt;
+            pawnZ += velZ * dt;
+        }
+
+        MotionCorr.Sample sample = new MotionCorr.Sample();
+        sample.tMs = tMs();
+        sample.scheme = frame.scheme == null ? "" : frame.scheme;
+        sample.leftX = frame.leftX;
+        sample.leftY = frame.leftY;
+        sample.rightX = frame.rightX;
+        sample.rightY = frame.rightY;
+        sample.jump = frame.jump;
+        sample.moveOwner = frame.moveOwner;
+        sample.lookOwner = frame.lookOwner;
+        sample.jumpOwner = frame.jumpOwner;
+        sample.sampleAgeMs = frame.sampleAgeMs;
+        sample.whoZeroed = frame.whoZeroed != null && !frame.whoZeroed.isEmpty()
+                ? frame.whoZeroed : lastWhoZeroed;
+        sample.pubMoveX = frame.pubMoveX;
+        sample.pubMoveY = frame.pubMoveY;
+        sample.pubLookX = frame.pubLookX;
+        sample.pubLookY = frame.pubLookY;
+        sample.conMoveX = frame.conMoveX;
+        sample.conMoveY = frame.conMoveY;
+        sample.conLookX = frame.conLookX;
+        sample.conLookY = frame.conLookY;
+        sample.jniLagMs = frame.jniLagMs;
+        sample.pawnX = pawnX;
+        sample.pawnY = 0.0f;
+        sample.pawnZ = pawnZ;
+        sample.velX = velX;
+        sample.velZ = velZ;
+        sample.yaw = motionYaw;
+        sample.pitch = motionPitch;
+        sample.dYaw = dYaw;
+        sample.dPitch = dPitch;
+        sample.dtSec = dt;
+        sample.flags = MotionCorr.flags(sample);
+        MotionCorr.fillHeadings(sample);
+
+        motionRing.push(sample);
+        if (lastSparkMs < 0L || now - lastSparkMs >= 50L) {
+            sparkInput.push(MotionCorr.mag(sample.leftX, sample.leftY));
+            sparkVel.push(MotionCorr.velMag(sample));
+            sparkLook.push(sample.actLookRate);
+            lastSparkMs = now;
+        }
+        latchWatch.onSample(sample, paused);
+        if (latchWatch.consumeStamp()) {
+            motionRing.freeze();
+            motionLockups.add(MotionCorr.lockupLine(
+                    sample.tMs, latchWatch.why(), sample.conMoveX, sample.conMoveY));
+        }
+        lastMotion = sample;
+        hudSnapshot = HudSnapshot.from(sample, sparkInput.snapshot(), sparkVel.snapshot(),
+                sparkLook.snapshot());
+    }
+
+    HudSnapshot hudSnapshot() {
+        return hudSnapshot;
+    }
+
+    MotionCorr.Sample lastMotion() {
+        return lastMotion;
+    }
+
+    private float[] lookDelta(float lookX, float lookY, float dt) {
+        float mag = (float) Math.hypot(lookX, lookY);
+        float ax = 0.0f;
+        float ay = 0.0f;
+        if (mag > LOOK_DEADZONE) {
+            float scaled = (mag - LOOK_DEADZONE) / (1.0f - LOOK_DEADZONE);
+            ax = lookX / mag * scaled;
+            ay = lookY / mag * scaled;
+        }
+        if (INVERT_Y != 0) {
+            ay = -ay;
+        }
+        return new float[] {ax * LOOK_SENS * dt, ay * LOOK_SENS * dt};
     }
 
     static float clampDt(float dt) {
@@ -381,9 +514,22 @@ final class DebugHub {
         }
         out.append('\n');
 
+        out.append("[MOTION_CORR]\n");
+        if (on()) {
+            appendMotionCorr(out);
+        } else {
+            out.append("skipped=off\n");
+        }
+        out.append('\n');
+
+        MotionCorr.LatchSummary summary = latchWatch.summary();
+        summary.frozen = motionRing.frozen();
+        out.append(MotionCorr.formatLatchSummary(summary));
+        out.append('\n');
+
         out.append("[LOCKUP]\n");
         List<ZeroEvent> recent = recentZeros();
-        if (recent.isEmpty()) {
+        if (recent.isEmpty() && motionLockups.isEmpty()) {
             out.append("none\n");
         } else {
             for (ZeroEvent event : recent) {
@@ -394,6 +540,9 @@ final class DebugHub {
                         .append(" axes=").append(fmt(event.axisX)).append(',')
                         .append(fmt(event.axisY))
                         .append('\n');
+            }
+            for (String line : motionLockups) {
+                out.append(line).append('\n');
             }
         }
         return out.toString();
@@ -417,6 +566,20 @@ final class DebugHub {
         boolean stuck = stuck(left) || stuck(right) || stuck(flatPad);
         out.append("stuckHint=").append(stuck ? 1 : 0).append('\n');
         out.append("jniLagMs=").append(jniLagMs).append('\n');
+        if (lastMotion != null) {
+            out.append("published.move=")
+                    .append(fmt(lastMotion.pubMoveX)).append(',')
+                    .append(fmt(lastMotion.pubMoveY)).append('\n');
+            out.append("published.look=")
+                    .append(fmt(lastMotion.pubLookX)).append(',')
+                    .append(fmt(lastMotion.pubLookY)).append('\n');
+            out.append("consumed.move=")
+                    .append(fmt(lastMotion.conMoveX)).append(',')
+                    .append(fmt(lastMotion.conMoveY)).append('\n');
+            out.append("consumed.look=")
+                    .append(fmt(lastMotion.conLookX)).append(',')
+                    .append(fmt(lastMotion.conLookY)).append('\n');
+        }
         if (flatPad != null) {
             appendFocus(out, flatPad);
         }
@@ -510,6 +673,18 @@ final class DebugHub {
         out.append("lookSens=").append(fmt(LOOK_SENS)).append('\n');
         out.append("invertY=").append(INVERT_Y).append('\n');
         out.append("lookAxis=").append(fmt(lookX)).append(',').append(fmt(lookY)).append('\n');
+        if (lastMotion != null) {
+            out.append("dYaw=").append(fmt(lastMotion.dYaw)).append('\n');
+            out.append("dPitch=").append(fmt(lastMotion.dPitch)).append('\n');
+            out.append("pawn.loc=")
+                    .append(fmt(lastMotion.pawnX)).append(',')
+                    .append(fmt(lastMotion.pawnY)).append(',')
+                    .append(fmt(lastMotion.pawnZ)).append('\n');
+            out.append("pawn.vel=")
+                    .append(fmt(lastMotion.velX)).append(',')
+                    .append(fmt(lastMotion.velZ)).append('\n');
+            out.append("pawnSrc=consumed_integrate\n");
+        }
         out.append("lookDeadzone=").append(fmt(LOOK_DEADZONE)).append('\n');
         out.append("lookAxisClamp=").append(fmt(AXIS_CLAMP_MIN)).append(',')
                 .append(fmt(AXIS_CLAMP_MAX)).append('\n');
@@ -612,5 +787,149 @@ final class DebugHub {
     static String isoNow() {
         return new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX", Locale.US)
                 .format(new java.util.Date());
+    }
+
+    private void appendMotionCorr(StringBuilder out) {
+        out.append("pawnSrc=consumed_integrate\n");
+        if (lastMotion != null) {
+            out.append("flags=").append(MotionCorr.flagNames(lastMotion.flags)).append('\n');
+            out.append("cmdMoveHeading=").append(MotionCorr.f(lastMotion.cmdMoveHeading)).append('\n');
+            out.append("actMoveHeading=").append(MotionCorr.f(lastMotion.actMoveHeading)).append('\n');
+            out.append("headingErrDeg=").append(MotionCorr.f(lastMotion.headingErrDeg)).append('\n');
+            out.append("cmdLookRate=").append(MotionCorr.f(lastMotion.cmdLookRate)).append('\n');
+            out.append("actLookRate=").append(MotionCorr.f(lastMotion.actLookRate)).append('\n');
+        }
+        out.append("spark.inputMagL=").append(sparkInput.strip()).append('\n');
+        out.append("spark.velMag=").append(sparkVel.strip()).append('\n');
+        out.append("spark.lookRate=").append(sparkLook.strip()).append('\n');
+        out.append(motionRing.frozen() ? motionRing.frozenCsv() : motionRing.toCsv());
+    }
+
+    static final class MotionFrame {
+        String scheme = "";
+        float leftX;
+        float leftY;
+        float rightX;
+        float rightY;
+        boolean jump;
+        int moveOwner = -1;
+        int lookOwner = -1;
+        int jumpOwner = -1;
+        long sampleAgeMs;
+        String whoZeroed = "";
+        float pubMoveX;
+        float pubMoveY;
+        float pubLookX;
+        float pubLookY;
+        float conMoveX;
+        float conMoveY;
+        float conLookX;
+        float conLookY;
+        long jniLagMs;
+    }
+
+    static final class HudSnapshot {
+        final String text;
+        final float cmdMoveX;
+        final float cmdMoveY;
+        final float actMoveX;
+        final float actMoveY;
+        final float cmdLookX;
+        final float cmdLookY;
+        final float actLookX;
+        final float actLookY;
+        final float[] sparkInput;
+        final float[] sparkVel;
+        final float[] sparkLook;
+        final int flags;
+
+        HudSnapshot(
+                String text,
+                float cmdMoveX,
+                float cmdMoveY,
+                float actMoveX,
+                float actMoveY,
+                float cmdLookX,
+                float cmdLookY,
+                float actLookX,
+                float actLookY,
+                float[] sparkInput,
+                float[] sparkVel,
+                float[] sparkLook,
+                int flags) {
+            this.text = text;
+            this.cmdMoveX = cmdMoveX;
+            this.cmdMoveY = cmdMoveY;
+            this.actMoveX = actMoveX;
+            this.actMoveY = actMoveY;
+            this.cmdLookX = cmdLookX;
+            this.cmdLookY = cmdLookY;
+            this.actLookX = actLookX;
+            this.actLookY = actLookY;
+            this.sparkInput = sparkInput;
+            this.sparkVel = sparkVel;
+            this.sparkLook = sparkLook;
+            this.flags = flags;
+        }
+
+        static HudSnapshot empty() {
+            return new HudSnapshot(
+                    "", 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                    new float[0], new float[0], new float[0], 0);
+        }
+
+        static HudSnapshot from(
+                MotionCorr.Sample sample, float[] sparkIn, float[] sparkV, float[] sparkL) {
+            String text = formatHud(sample);
+            return new HudSnapshot(
+                    text,
+                    sample.leftX,
+                    sample.leftY,
+                    sample.conMoveX,
+                    sample.conMoveY,
+                    sample.rightX,
+                    sample.rightY,
+                    sample.dYaw,
+                    sample.dPitch,
+                    sparkIn,
+                    sparkV,
+                    sparkL,
+                    sample.flags);
+        }
+
+        private static String formatHud(MotionCorr.Sample sample) {
+            StringBuilder out = new StringBuilder(512);
+            out.append(sample.scheme)
+                    .append(" own M").append(sample.moveOwner)
+                    .append(" L").append(sample.lookOwner)
+                    .append(" J").append(sample.jumpOwner).append('\n');
+            out.append("L ").append(fmt(sample.leftX)).append(',').append(fmt(sample.leftY))
+                    .append(" mag=").append(fmt(MotionCorr.mag(sample.leftX, sample.leftY)))
+                    .append(" age=").append(sample.sampleAgeMs)
+                    .append(" who=").append(sample.whoZeroed == null ? "" : sample.whoZeroed)
+                    .append('\n');
+            out.append("R ").append(fmt(sample.rightX)).append(',').append(fmt(sample.rightY))
+                    .append(" mag=").append(fmt(MotionCorr.mag(sample.rightX, sample.rightY)))
+                    .append('\n');
+            out.append("pub ").append(fmt(sample.pubMoveX)).append(',').append(fmt(sample.pubMoveY))
+                    .append(" / ").append(fmt(sample.pubLookX)).append(',').append(fmt(sample.pubLookY))
+                    .append('\n');
+            out.append("con ").append(fmt(sample.conMoveX)).append(',').append(fmt(sample.conMoveY))
+                    .append(" / ").append(fmt(sample.conLookX)).append(',').append(fmt(sample.conLookY))
+                    .append(" lag=").append(sample.jniLagMs).append('\n');
+            out.append("pawn v=").append(fmt(MotionCorr.velMag(sample)))
+                    .append(" dYaw=").append(fmt(sample.dYaw))
+                    .append(" dPit=").append(fmt(sample.dPitch))
+                    .append(" loc=").append(fmt(sample.pawnX)).append(',')
+                    .append(fmt(sample.pawnZ)).append('\n');
+            out.append("yaw=").append(fmt(sample.yaw))
+                    .append(" pit=").append(fmt(sample.pitch))
+                    .append(" cmdH=").append(MotionCorr.f(sample.cmdMoveHeading))
+                    .append(" actH=").append(MotionCorr.f(sample.actMoveHeading))
+                    .append(" err=").append(MotionCorr.f(sample.headingErrDeg))
+                    .append('\n');
+            out.append("FLAGS ").append(MotionCorr.flagNames(sample.flags));
+            return out.toString();
+        }
     }
 }

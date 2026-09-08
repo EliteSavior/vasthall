@@ -71,6 +71,7 @@ public final class VastHallActivity extends Activity implements
     private TextView consoleOutput;
     private EditText consoleInput;
     private TextView dbgMark;
+    private DebugMotionOverlay motionOverlay;
     private SurfaceView surface;
     private PlayHud playHud;
     private PlayInputMachine playInput;
@@ -122,6 +123,10 @@ public final class VastHallActivity extends Activity implements
                     lookY = rightZone == null ? 0.0f : rightZone.axisY();
                 }
                 debugHub.tickFrame(lookX, lookY);
+                debugHub.tickMotion(collectMotionFrame());
+                if (motionOverlay != null && debugHub.on()) {
+                    motionOverlay.setSnapshot(debugHub.hudSnapshot());
+                }
             }
             if (watchdogRunning) {
                 Choreographer.getInstance().postFrameCallback(this);
@@ -370,6 +375,11 @@ public final class VastHallActivity extends Activity implements
         widgetLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
         widgetLp.topMargin = dp(36);
         root.addView(widgetOverlay, widgetLp);
+
+        motionOverlay = new DebugMotionOverlay(this);
+        root.addView(motionOverlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
 
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             int top = insets.getSystemWindowInsetTop();
@@ -894,8 +904,12 @@ public final class VastHallActivity extends Activity implements
     }
 
     private void applyDbgMark() {
+        boolean on = debugHub != null && debugHub.on();
         if (dbgMark != null) {
-            dbgMark.setVisibility(debugHub != null && debugHub.on() ? View.VISIBLE : View.GONE);
+            dbgMark.setVisibility(on ? View.VISIBLE : View.GONE);
+        }
+        if (motionOverlay != null) {
+            motionOverlay.setDebugVisible(on);
         }
     }
 
@@ -974,11 +988,57 @@ public final class VastHallActivity extends Activity implements
                 beaconBit));
     }
 
+    private DebugHub.MotionFrame collectMotionFrame() {
+        DebugHub.MotionFrame frame = new DebugHub.MotionFrame();
+        frame.scheme = schemeGate == null
+                ? (dual ? SCHEME_DUAL : SCHEME_LEGACY)
+                : schemeGate.current().prefValue();
+        boolean flat = schemeGate != null && schemeGate.newPadEnabled() && flatPad != null;
+        if (flat) {
+            frame.leftX = flatPad.moveX();
+            frame.leftY = flatPad.moveY();
+            frame.rightX = flatPad.lookX();
+            frame.rightY = flatPad.lookY();
+            frame.jump = flatPad.jumpDown();
+            frame.moveOwner = flatPad.ownerOf(FlatPadRouter.Target.MOVE);
+            frame.lookOwner = flatPad.ownerOf(FlatPadRouter.Target.LOOK);
+            frame.jumpOwner = flatPad.ownerOf(FlatPadRouter.Target.JUMP);
+            long ageMove = flatPad.sampleAgeMs(FlatPadRouter.Target.MOVE);
+            long ageLook = flatPad.sampleAgeMs(FlatPadRouter.Target.LOOK);
+            frame.sampleAgeMs = Math.max(ageMove, ageLook);
+            frame.whoZeroed = flatPad.lastWhoZeroed();
+        } else {
+            frame.leftX = leftZone == null ? 0.0f : leftZone.axisX();
+            frame.leftY = leftZone == null ? 0.0f : leftZone.axisY();
+            frame.rightX = rightZone == null ? 0.0f : rightZone.axisX();
+            frame.rightY = rightZone == null ? 0.0f : rightZone.axisY();
+            frame.jump = debugHub != null && debugHub.jumpDown();
+            frame.moveOwner = leftZone != null && leftZone.hasActiveFinger()
+                    ? leftZone.pointerId() : -1;
+            frame.lookOwner = rightZone != null && rightZone.hasActiveFinger()
+                    ? rightZone.pointerId() : -1;
+            frame.jumpOwner = frame.jump ? 0 : -1;
+            frame.sampleAgeMs = 0L;
+        }
+        if (hudAxes != null) {
+            frame.pubMoveX = hudAxes.publishedMoveX();
+            frame.pubMoveY = hudAxes.publishedMoveY();
+            frame.pubLookX = hudAxes.publishedLookX();
+            frame.pubLookY = hudAxes.publishedLookY();
+            frame.conMoveX = hudAxes.consumedMoveX();
+            frame.conMoveY = hudAxes.consumedMoveY();
+            frame.conLookX = hudAxes.consumedLookX();
+            frame.conLookY = hudAxes.consumedLookY();
+            frame.jniLagMs = hudAxes.jniLagMs();
+        }
+        return frame;
+    }
+
     private String currentDump() {
         String scheme = schemeGate == null
                 ? (dual ? SCHEME_DUAL : SCHEME_LEGACY)
                 : schemeGate.current().prefValue();
-        String version = "0.34.0";
+        String version = "0.35.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
