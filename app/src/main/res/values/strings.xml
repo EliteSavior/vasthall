@@ -3,9 +3,11 @@
     <string name="app_name">Vast Hall</string>
     <string name="back_to_menu">Back</string>
     <string name="controls">Controls</string>
-    <string name="dual_joysticks">Dual joysticks (default)</string>
+    <string name="dual_joysticks">Legacy pad</string>
     <string name="jump">Jump</string>
     <string name="legacy_touch">Legacy touch</string>
+    <string name="legacy_pad">Legacy pad</string>
+    <string name="new_pad">New pad</string>
     <string name="menu">Menu</string>
     <string name="resume">Resume</string>
     <string name="settings">Settings</string>

@@ -56,6 +56,7 @@ public final class VastHallActivity extends Activity implements
     static final String PREF_CONTROLS_SCHEME = "vasthall.controls.scheme";
     static final String SCHEME_DUAL = "dual";
     static final String SCHEME_LEGACY = "legacy";
+    static final String SCHEME_FLAT = "flat";
     private static final String TAG = "VastHall";
 
     private TextView jump;
@@ -73,6 +74,9 @@ public final class VastHallActivity extends Activity implements
     private SurfaceView surface;
     private PlayHud playHud;
     private PlayInputMachine playInput;
+    private FlatPadRouter flatPad;
+    private FlatPadOverlay flatOverlay;
+    private ControlSchemeGate schemeGate;
     private boolean dual = true;
     private boolean menuOpen;
     private boolean watchdogRunning;
@@ -98,13 +102,23 @@ public final class VastHallActivity extends Activity implements
             if (hudAxes != null) {
                 hudAxes.pulse();
             }
+            if (schemeGate != null && schemeGate.newPadEnabled() && flatPad != null) {
+                flatPad.publish();
+            }
             tickWorld(frameTimeNanos);
             if (debugHub != null) {
                 if (hudAxes != null) {
                     debugHub.setJniLagMs(hudAxes.jniLagMs());
                 }
-                float lookX = rightZone == null ? 0.0f : rightZone.axisX();
-                float lookY = rightZone == null ? 0.0f : rightZone.axisY();
+                float lookX;
+                float lookY;
+                if (schemeGate != null && schemeGate.newPadEnabled() && flatPad != null) {
+                    lookX = flatPad.lookX();
+                    lookY = flatPad.lookY();
+                } else {
+                    lookX = rightZone == null ? 0.0f : rightZone.axisX();
+                    lookY = rightZone == null ? 0.0f : rightZone.axisY();
+                }
                 debugHub.tickFrame(lookX, lookY);
             }
             if (watchdogRunning) {
@@ -140,8 +154,10 @@ public final class VastHallActivity extends Activity implements
         getWindow().addFlags(1152);
         hideSystemUi();
 
-        dual = !SCHEME_LEGACY.equals(
+        ControlScheme savedScheme = ControlScheme.fromPref(
                 prefs().getString(PREF_CONTROLS_SCHEME, SCHEME_DUAL));
+        schemeGate = new ControlSchemeGate(savedScheme);
+        dual = schemeGate.legacyPadEnabled();
         debugHub = new DebugHub(prefs());
 
         hudAxes = new HudAxes(new HudAxes.NativeSink() {
@@ -249,6 +265,35 @@ public final class VastHallActivity extends Activity implements
 
         playHud = buildPlayHud();
         root.addView(playHud, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        flatPad = new FlatPadRouter();
+        flatPad.setSink(new FlatPadRouter.Sink() {
+            @Override
+            public void setMove(float x, float y) {
+                hudAxes.setMove(x, y);
+                PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_MOVE, x, y);
+            }
+
+            @Override
+            public void setLook(float x, float y) {
+                hudAxes.setLook(x, y);
+                PlayInputRouter.feedTouchAxis(world, InputKeys.TOUCH_LOOK, x, y);
+            }
+
+            @Override
+            public void setJump(boolean down) {
+                if (debugHub != null) {
+                    debugHub.setJump(down);
+                }
+                hudAxes.setJump(down);
+                PlayInputRouter.feedTouchButton(world, InputKeys.TOUCH_JUMP, down);
+            }
+        });
+        flatOverlay = new FlatPadOverlay(this, flatPad);
+        flatOverlay.setJumpChrome(dp(72), dp(186), dp(48), getString(R.string.jump));
+        root.addView(flatOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -361,7 +406,7 @@ public final class VastHallActivity extends Activity implements
         nativeInit();
         beginPlayWorld();
         hudAxes.start();
-        applyScheme(dual, false);
+        applyScheme(schemeGate.current(), false);
         applyDbgMark();
         updateEngineHud();
         debugHub.lifecycle("onCreate");
@@ -520,6 +565,12 @@ public final class VastHallActivity extends Activity implements
         if (debugHub != null) {
             debugHub.onZero("both", reason, -1, 0.0f, 0.0f);
         }
+        if (flatPad != null) {
+            flatPad.releaseAll(reason);
+        }
+        if (flatOverlay != null) {
+            flatOverlay.invalidate();
+        }
         if (playHud != null) {
             playHud.cancelAll(reason);
         } else if (playInput != null) {
@@ -568,24 +619,37 @@ public final class VastHallActivity extends Activity implements
         panel.addView(title(getString(R.string.controls)));
         RadioGroup group = new RadioGroup(this);
         group.setOrientation(RadioGroup.VERTICAL);
-        RadioButton dualButton = new RadioButton(this);
-        dualButton.setId(View.generateViewId());
-        dualButton.setText(R.string.dual_joysticks);
-        dualButton.setTextColor(0xffffffff);
-        dualButton.setTextSize(18.0f);
-        RadioButton legacyButton = new RadioButton(this);
-        legacyButton.setId(View.generateViewId());
-        legacyButton.setText(R.string.legacy_touch);
-        legacyButton.setTextColor(0xffffffff);
-        legacyButton.setTextSize(18.0f);
-        group.addView(dualButton);
-        group.addView(legacyButton);
-        group.check(dual ? dualButton.getId() : legacyButton.getId());
-        group.setOnCheckedChangeListener((radioGroup, checkedId) -> {
-            boolean dualOn = checkedId == dualButton.getId();
-            prefs().edit().putString(
-                    PREF_CONTROLS_SCHEME, dualOn ? SCHEME_DUAL : SCHEME_LEGACY).apply();
-            applyScheme(dualOn, true);
+        ControlScheme selected = schemeGate == null
+                ? ControlScheme.LEGACY_PAD
+                : schemeGate.current();
+        int checkedId = View.NO_ID;
+        for (ControlScheme option : ControlScheme.settingsOrder()) {
+            RadioButton button = new RadioButton(this);
+            button.setId(View.generateViewId());
+            button.setTag(option);
+            button.setText(option.label());
+            button.setTextColor(0xffffffff);
+            button.setTextSize(18.0f);
+            group.addView(button);
+            if (option == selected) {
+                checkedId = button.getId();
+            }
+        }
+        if (checkedId != View.NO_ID) {
+            group.check(checkedId);
+        }
+        group.setOnCheckedChangeListener((radioGroup, id) -> {
+            View checked = radioGroup.findViewById(id);
+            if (!(checked instanceof RadioButton)) {
+                return;
+            }
+            Object tag = checked.getTag();
+            if (!(tag instanceof ControlScheme)) {
+                return;
+            }
+            ControlScheme next = (ControlScheme) tag;
+            prefs().edit().putString(PREF_CONTROLS_SCHEME, next.prefValue()).apply();
+            applyScheme(next, true);
         });
         panel.addView(group);
         panel.addView(menuAction(getString(R.string.back_to_menu), this::openMenu));
@@ -703,18 +767,25 @@ public final class VastHallActivity extends Activity implements
         return button;
     }
 
-    private void applyScheme(boolean dualOn, boolean notifyJump) {
-        dual = dualOn;
-        nativeSetControlScheme(dualOn ? 0 : 1);
-        surface.setOnTouchListener(dualOn ? null : this);
+    private void applyScheme(ControlScheme next, boolean notifyJump) {
+        if (schemeGate == null) {
+            schemeGate = new ControlSchemeGate(next);
+        }
+        schemeGate.select(next, () -> zeroAllControls("APPLY_SCHEME"));
+        ControlScheme scheme = schemeGate.current();
+        dual = scheme == ControlScheme.LEGACY_PAD;
+        nativeSetControlScheme(scheme == ControlScheme.LEGACY_TOUCH ? 1 : 0);
+        surface.setOnTouchListener(scheme == ControlScheme.LEGACY_TOUCH ? this : null);
         surface.setClickable(false);
         if (playHud != null) {
-            playHud.setPlayVisible(dualOn);
+            playHud.setPlayVisible(scheme == ControlScheme.LEGACY_PAD);
         }
         if (jump != null) {
-            jump.setVisibility(dualOn ? View.VISIBLE : View.GONE);
+            jump.setVisibility(scheme == ControlScheme.LEGACY_PAD ? View.VISIBLE : View.GONE);
         }
-        zeroAllControls("APPLY_SCHEME");
+        if (flatOverlay != null) {
+            flatOverlay.setPlayVisible(scheme == ControlScheme.NEW_PAD);
+        }
         if (notifyJump && hudAxes != null) {
             hudAxes.setJump(false);
         }
@@ -888,8 +959,10 @@ public final class VastHallActivity extends Activity implements
     }
 
     private String currentDump() {
-        String scheme = dual ? SCHEME_DUAL : SCHEME_LEGACY;
-        String version = "0.32.0";
+        String scheme = schemeGate == null
+                ? (dual ? SCHEME_DUAL : SCHEME_LEGACY)
+                : schemeGate.current().prefValue();
+        String version = "0.33.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
@@ -1047,7 +1120,7 @@ public final class VastHallActivity extends Activity implements
 
     @Override
     public boolean onTouch(View view, MotionEvent event) {
-        if (menuOpen || dual) {
+        if (menuOpen || schemeGate == null || !schemeGate.legacyTouchEnabled()) {
             return true;
         }
         int action = event.getActionMasked();
