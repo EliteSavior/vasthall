@@ -1,6 +1,7 @@
 package com.elitesavior.vasthall;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.content.SharedPreferences;
@@ -17,6 +18,9 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowSystemClock;
+
+import java.time.Duration;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
@@ -84,6 +88,8 @@ public final class DebugHubTest {
         assertTrue(dump.contains("onResume"));
         assertTrue(dump.contains("[LOCKUP]"));
         assertTrue(dump.contains("whoZeroed=CANCEL"));
+        assertTrue(dump.contains("[MOTION_CORR]"));
+        assertTrue(dump.contains("[LATCH_SUMMARY]"));
         assertFalse(dump.contains("INTERNET"));
     }
 
@@ -177,6 +183,68 @@ public final class DebugHubTest {
         assertTrue(dump.contains("component class=CollisionComponent"));
         assertTrue(dump.contains("tags=pawn"));
         assertTrue(dump.contains("tags=beacon"));
+    }
+
+    @Test
+    public void motionCorrDumpIncludesRingHeadingsAndSparks() {
+        DebugHub.MotionFrame frame = new DebugHub.MotionFrame();
+        frame.scheme = "flat";
+        frame.leftX = 0.80f;
+        frame.pubMoveX = 0.80f;
+        frame.conMoveX = 0.80f;
+        frame.moveOwner = 7;
+        frame.lookOwner = -1;
+        frame.jumpOwner = -1;
+        frame.sampleAgeMs = 8L;
+        for (int i = 0; i < 8; i++) {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+            hub.tickMotion(frame);
+        }
+        String dump = hub.buildDump("0.35.0", "flat", left, right, false);
+        assertTrue(dump.contains("[CONTROLS]"));
+        assertTrue(dump.contains("[CAMERA]"));
+        assertTrue(dump.contains("[INPUT_LOG]"));
+        assertTrue(dump.contains("[MOTION_CORR]"));
+        assertTrue(dump.contains("pawnSrc=consumed_integrate"));
+        assertTrue(dump.contains("lookRateUnit=rad_s"));
+        assertTrue(dump.contains("cmdMoveHeading="));
+        assertTrue(dump.contains("actMoveHeading="));
+        assertTrue(dump.contains("headingErrDeg="));
+        assertTrue(dump.contains("cmdLookRate="));
+        assertTrue(dump.contains("actLookRate="));
+        assertTrue(dump.contains("spark.inputMagL="));
+        assertTrue(dump.contains("spark.velMag="));
+        assertTrue(dump.contains("published.move=0.8000,0.0000"));
+        assertTrue(dump.contains("consumed.move=0.8000,0.0000"));
+        assertTrue(dump.contains("t_ms,scheme,left.x,left.y"));
+        assertTrue(dump.contains("[LATCH_SUMMARY]"));
+        assertTrue(dump.contains("latched=0"));
+        assertNotNull(hub.hudSnapshot());
+        assertTrue(hub.hudSnapshot().text.contains("own M7"));
+        assertTrue(hub.hudSnapshot().text.contains("FLAGS"));
+    }
+
+    @Test
+    public void motionWithoutInputFreezesRingAndStampsLockup() {
+        DebugHub.MotionFrame frame = new DebugHub.MotionFrame();
+        frame.scheme = "flat";
+        frame.conMoveX = 0.82f;
+        frame.pubMoveX = 0.82f;
+        frame.moveOwner = -1;
+        frame.lookOwner = -1;
+        frame.jumpOwner = -1;
+        for (int i = 0; i < 20; i++) {
+            ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+            hub.tickMotion(frame);
+        }
+        String dump = hub.buildDump("0.35.0", "flat", left, right, false);
+        assertTrue(dump.contains("why=MOTION_WITHOUT_INPUT"));
+        assertTrue(dump.contains("latched=1"));
+        assertTrue(dump.contains("peakAxesWhileOwnersEmpty="));
+        assertTrue(dump.contains("peakJniLagMs="));
+        assertTrue(dump.contains("pauseCleared="));
+        assertTrue(dump.contains("INPUT_ZERO_MOTION_NONZERO"));
+        assertTrue(hub.hudSnapshot().text.contains("INPUT_ZERO_MOTION_NONZERO"));
     }
 
     private static MotionEvent event(int pointerId, int action, float x, float y) {

@@ -22,6 +22,11 @@ final class HudAxes {
     private final AtomicInteger lookX = new AtomicInteger(Float.floatToIntBits(0.0f));
     private final AtomicInteger lookY = new AtomicInteger(Float.floatToIntBits(0.0f));
     private final AtomicInteger jump = new AtomicInteger(0);
+    private final AtomicInteger consumedMoveX = new AtomicInteger(Float.floatToIntBits(0.0f));
+    private final AtomicInteger consumedMoveY = new AtomicInteger(Float.floatToIntBits(0.0f));
+    private final AtomicInteger consumedLookX = new AtomicInteger(Float.floatToIntBits(0.0f));
+    private final AtomicInteger consumedLookY = new AtomicInteger(Float.floatToIntBits(0.0f));
+    private final AtomicInteger consumedJump = new AtomicInteger(0);
     private final NativeSink sink;
     private volatile boolean running;
     private volatile Thread pump;
@@ -55,6 +60,50 @@ final class HudAxes {
     long jniLagMs() {
         long lag = (System.nanoTime() - lastNativeConsumeNs) / 1_000_000L;
         return Math.max(0L, lag);
+    }
+
+    float publishedMoveX() {
+        return bits(moveX);
+    }
+
+    float publishedMoveY() {
+        return bits(moveY);
+    }
+
+    float publishedLookX() {
+        return bits(lookX);
+    }
+
+    float publishedLookY() {
+        return bits(lookY);
+    }
+
+    boolean publishedJump() {
+        return jump.get() != 0;
+    }
+
+    float consumedMoveX() {
+        return bits(consumedMoveX);
+    }
+
+    float consumedMoveY() {
+        return bits(consumedMoveY);
+    }
+
+    float consumedLookX() {
+        return bits(consumedLookX);
+    }
+
+    float consumedLookY() {
+        return bits(consumedLookY);
+    }
+
+    boolean consumedJump() {
+        return consumedJump.get() != 0;
+    }
+
+    private static float bits(AtomicInteger cell) {
+        return Float.intBitsToFloat(cell.get());
     }
 
     void start() {
@@ -93,6 +142,11 @@ final class HudAxes {
             sink.setMove(mx, my);
             sink.setLook(lx, ly);
             sink.setJump(down);
+            consumedMoveX.set(Float.floatToIntBits(mx));
+            consumedMoveY.set(Float.floatToIntBits(my));
+            consumedLookX.set(Float.floatToIntBits(lx));
+            consumedLookY.set(Float.floatToIntBits(ly));
+            consumedJump.set(down ? 1 : 0);
             lastNativeConsumeNs = System.nanoTime();
             if (running) {
                 // Vsync pulse() wakes this; 8ms is a fallback, not a 20 Hz cap.

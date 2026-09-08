@@ -283,6 +283,40 @@ public final class StickViewTest {
     }
 
     @Test
+    public void publishedAxesAreVisibleBeforeConsumeAndConsumedMatchesLastApply() throws Exception {
+        CountDownLatch applied = new CountDownLatch(1);
+        HudAxes axes = new HudAxes(new HudAxes.NativeSink() {
+            @Override
+            public void setMove(float x, float y) {
+                if (x == 0.40f && y == -0.20f) {
+                    applied.countDown();
+                }
+            }
+
+            @Override
+            public void setLook(float x, float y) {
+            }
+
+            @Override
+            public void setJump(boolean down) {
+            }
+        });
+        axes.setMove(0.40f, -0.20f);
+        axes.setLook(0.10f, 0.30f);
+        assertEquals(0.40f, axes.publishedMoveX(), EPSILON);
+        assertEquals(-0.20f, axes.publishedMoveY(), EPSILON);
+        assertEquals(0.10f, axes.publishedLookX(), EPSILON);
+        assertEquals(0.30f, axes.publishedLookY(), EPSILON);
+        axes.start();
+        assertTrue(applied.await(1, TimeUnit.SECONDS));
+        assertEquals(0.40f, axes.consumedMoveX(), EPSILON);
+        assertEquals(-0.20f, axes.consumedMoveY(), EPSILON);
+        assertEquals(0.10f, axes.consumedLookX(), EPSILON);
+        assertEquals(0.30f, axes.consumedLookY(), EPSILON);
+        axes.stop();
+    }
+
+    @Test
     public void twentySecondDualHoldThroughPlayHudNeverSeesN2() {
         StickView left = zone(true);
         StickView right = zone(false);
