@@ -205,34 +205,35 @@ final class FlatPadRouter {
         }
     }
 
-    /**
-     * Latch-free sample. Timeout (~100ms) kills a stick whose owner has no
-     * fresh sample. JNI lag at/above {@link #JNI_LAG_RELEASE_MS} with no
-     * fresh sample releases every owner.
-     */
     void tick(long jniLagMs) {
-        if (pointers.isEmpty()) {
+        tick(jniLagMs, null);
+    }
+
+    /**
+     * Latch-free sample. A watchdog tick with {@code liveIds == null} does
+     * not kill a held-still stick (Android does not send MOVE while a finger
+     * is stationary). Timeout / LAG require an empty live pointer set — the
+     * stream reported no fingers — plus a stale sample. A non-empty live set
+     * orphans owners missing from it immediately.
+     */
+    void tick(long jniLagMs, int[] liveIds) {
+        if (liveIds != null && liveIds.length > 0) {
+            noteLivePointers(liveIds);
+            return;
+        }
+        if (pointers.isEmpty() || liveIds == null) {
             return;
         }
         long now = now();
         long sampleAge = lastAnySampleMs <= 0L ? Long.MAX_VALUE : now - lastAnySampleMs;
-        if (jniLagMs >= JNI_LAG_RELEASE_MS && sampleAge > SAMPLE_TIMEOUT_MS) {
+        if (sampleAge <= SAMPLE_TIMEOUT_MS) {
+            return;
+        }
+        if (jniLagMs >= JNI_LAG_RELEASE_MS) {
             releaseAll("LAG");
             return;
         }
-        List<Integer> timedOut = new ArrayList<>();
-        for (Map.Entry<Integer, Bind> entry : pointers.entrySet()) {
-            Bind bind = entry.getValue();
-            if (bind.target == Target.JUMP) {
-                continue;
-            }
-            if (now - bind.lastSampleMs > SAMPLE_TIMEOUT_MS) {
-                timedOut.add(entry.getKey());
-            }
-        }
-        for (int pid : timedOut) {
-            up(pid, "TIMEOUT");
-        }
+        releaseAll("TIMEOUT");
     }
 
     void publish() {

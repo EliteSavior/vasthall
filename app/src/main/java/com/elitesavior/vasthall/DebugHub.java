@@ -407,14 +407,47 @@ final class DebugHub {
             boolean jump,
             FlatPadRouter flatPad) {
         out.append("scheme=").append(scheme).append('\n');
-        appendZone(out, "left", left);
-        appendZone(out, "right", right);
+        if (flatPad != null && "flat".equals(scheme)) {
+            appendFocusZones(out, flatPad);
+        } else {
+            appendZone(out, "left", left);
+            appendZone(out, "right", right);
+        }
         out.append("jump=").append(jump ? 1 : 0).append('\n');
         boolean stuck = stuck(left) || stuck(right) || stuck(flatPad);
         out.append("stuckHint=").append(stuck ? 1 : 0).append('\n');
         out.append("jniLagMs=").append(jniLagMs).append('\n');
         if (flatPad != null) {
             appendFocus(out, flatPad);
+        }
+    }
+
+    private static void appendFocusZones(StringBuilder out, FlatPadRouter flatPad) {
+        appendFocusZone(out, "left", FlatPadRouter.Target.MOVE, flatPad);
+        appendFocusZone(out, "right", FlatPadRouter.Target.LOOK, flatPad);
+    }
+
+    private static void appendFocusZone(
+            StringBuilder out, String name, FlatPadRouter.Target target, FlatPadRouter flatPad) {
+        int pid = flatPad.ownerOf(target);
+        float axisX = target == FlatPadRouter.Target.MOVE ? flatPad.moveX() : flatPad.lookX();
+        float axisY = target == FlatPadRouter.Target.MOVE ? flatPad.moveY() : flatPad.lookY();
+        out.append(name).append(".axis=")
+                .append(fmt(axisX)).append(',').append(fmt(axisY)).append('\n');
+        out.append(name).append(".active=").append(pid == FlatPadRouter.INVALID_POINTER ? 0 : 1)
+                .append('\n');
+        out.append(name).append(".pointerId=").append(pid).append('\n');
+        if (pid == FlatPadRouter.INVALID_POINTER) {
+            out.append(name).append(".origin=0,0\n");
+            out.append(name).append(".knob=0,0\n");
+        } else {
+            float r = Math.max(flatPad.layout().stickRadius, 1.0f);
+            out.append(name).append(".origin=")
+                    .append(fmt(flatPad.originX(pid))).append(',')
+                    .append(fmt(flatPad.originY(pid))).append('\n');
+            out.append(name).append(".knob=")
+                    .append(fmt(flatPad.originX(pid) + flatPad.axisX(pid) * r)).append(',')
+                    .append(fmt(flatPad.originY(pid) + flatPad.axisY(pid) * r)).append('\n');
         }
     }
 

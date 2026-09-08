@@ -194,7 +194,19 @@ public final class FlatPadRouterTest {
     }
 
     @Test
-    public void sampleTimeoutForcesStickZeroWithoutWaitingForMove() {
+    public void heldStickWithoutMoveSurvivesWatchdogTick() {
+        clock.now = 1_000L;
+        assertTrue(router.down(7, 100.0f, 200.0f));
+        router.move(7, 171.0f, 200.0f);
+        clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 50L;
+        router.tick(0L);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(1.0f, sink.moveX, EPSILON);
+    }
+
+    @Test
+    public void sampleTimeoutForcesStickZeroWhenLiveSetIsEmpty() {
         clock.now = 1_000L;
         assertTrue(router.down(7, 100.0f, 200.0f));
         router.move(7, 171.0f, 200.0f);
@@ -202,12 +214,12 @@ public final class FlatPadRouterTest {
         assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
 
         clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS;
-        router.tick(0L);
+        router.tick(0L, new int[0]);
         assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
         assertEquals(1.0f, router.moveX(), EPSILON);
 
         clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 1L;
-        router.tick(0L);
+        router.tick(0L, new int[0]);
         assertFalse(router.hasPointer(7));
         assertEquals(FlatPadRouter.INVALID_POINTER, router.ownerOf(FlatPadRouter.Target.MOVE));
         assertEquals(0.0f, router.moveX(), EPSILON);
@@ -222,7 +234,7 @@ public final class FlatPadRouterTest {
         router.down(7, 100.0f, 200.0f);
         router.move(7, 171.0f, 200.0f);
         clock.now = 5_016L;
-        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS + 50L);
+        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS + 50L, new int[] {7});
         assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
         assertEquals(1.0f, router.moveX(), EPSILON);
     }
@@ -237,7 +249,7 @@ public final class FlatPadRouterTest {
         router.down(3, 820.0f, 500.0f);
 
         clock.now = 8_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 1L;
-        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS);
+        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS, new int[0]);
         assertEquals("LAG", router.lastWhoZeroed());
         assertFalse(router.anyPressed());
         assertEquals(0.0f, sink.moveX, EPSILON);

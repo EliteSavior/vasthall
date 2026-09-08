@@ -128,6 +128,52 @@ public final class FlatPadOverlayTest {
                 historical > 0.4f && historical < 0.6f);
     }
 
+    @Test
+    public void lastUpOrphansLeftoverOwnerMissingFromTheEvent() {
+        float r = Math.max(router.layout().stickRadius, 1.0f);
+        overlay.onTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 200.0f));
+        overlay.onTouchEvent(event(7, MotionEvent.ACTION_MOVE, 100.0f + r, 200.0f));
+        overlay.onTouchEvent(event(
+                new int[] {7, 11},
+                MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+                new float[] {100.0f + r, 700.0f},
+                new float[] {200.0f, 200.0f}));
+        overlay.onTouchEvent(event(
+                new int[] {7, 11},
+                MotionEvent.ACTION_MOVE,
+                new float[] {100.0f + r, 700.0f + r},
+                new float[] {200.0f, 200.0f}));
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(11, router.ownerOf(FlatPadRouter.Target.LOOK));
+
+        overlay.onTouchEvent(event(7, MotionEvent.ACTION_UP, 100.0f + r, 200.0f));
+        assertFalse(router.hasPointer(7));
+        assertFalse(router.hasPointer(11));
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, router.lookX(), EPSILON);
+        assertEquals("ORPHAN", router.lastWhoZeroed());
+    }
+
+    @Test
+    public void moveUpdatesOwnerAtIndexOne() {
+        float r = Math.max(router.layout().stickRadius, 1.0f);
+        overlay.onTouchEvent(event(7, MotionEvent.ACTION_DOWN, 100.0f, 200.0f));
+        overlay.onTouchEvent(event(
+                new int[] {11, 7},
+                MotionEvent.ACTION_POINTER_DOWN,
+                new float[] {700.0f, 100.0f + r},
+                new float[] {200.0f, 200.0f}));
+        overlay.onTouchEvent(event(
+                new int[] {11, 7},
+                MotionEvent.ACTION_MOVE,
+                new float[] {700.0f + r, 100.0f + r},
+                new float[] {200.0f, 200.0f}));
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(11, router.ownerOf(FlatPadRouter.Target.LOOK));
+        assertEquals(1.0f, router.lookX(), EPSILON);
+    }
+
     private static MotionEvent event(int pointerId, int action, float x, float y) {
         return event(new int[] {pointerId}, action, new float[] {x}, new float[] {y});
     }

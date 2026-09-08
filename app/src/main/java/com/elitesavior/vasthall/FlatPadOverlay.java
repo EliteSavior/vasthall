@@ -128,6 +128,10 @@ final class FlatPadOverlay extends View {
                     router.up(liftPid, "UP");
                     whoZeroed = "UP";
                 }
+                router.noteLivePointers(remainingPointerIds(event, liftPid));
+                if ("ORPHAN".equals(router.lastWhoZeroed()) && whoZeroed == null) {
+                    whoZeroed = "ORPHAN";
+                }
                 invalidate();
                 notifyProbe(event, whoZeroed);
                 return true;
@@ -188,6 +192,25 @@ final class FlatPadOverlay extends View {
         }
         router.down(event.getPointerId(index), event.getX(index), event.getY(index));
         invalidate();
+    }
+
+    private static int[] remainingPointerIds(MotionEvent event, int liftPid) {
+        int count = event.getPointerCount();
+        int remain = 0;
+        for (int i = 0; i < count; i++) {
+            if (event.getPointerId(i) != liftPid) {
+                remain++;
+            }
+        }
+        int[] ids = new int[remain];
+        int n = 0;
+        for (int i = 0; i < count; i++) {
+            int pid = event.getPointerId(i);
+            if (pid != liftPid) {
+                ids[n++] = pid;
+            }
+        }
+        return ids;
     }
 
     private void notifyProbe(MotionEvent event, String whoZeroed) {
