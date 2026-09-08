@@ -225,6 +225,77 @@ public final class DebugHubTest {
     }
 
     @Test
+    public void motionCorrDoesNotStampStaleOpenMenuAfterFreshBind() {
+        hub.onZero("both", "OPEN_MENU", -1, 0.0f, 0.0f);
+        DebugHub.MotionFrame stale = new DebugHub.MotionFrame();
+        stale.scheme = "flat";
+        stale.whoZeroed = "OPEN_MENU";
+        ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+        hub.tickMotion(stale);
+        DebugHub.MotionFrame fresh = new DebugHub.MotionFrame();
+        fresh.scheme = "flat";
+        fresh.leftX = 0.50f;
+        fresh.pubMoveX = 0.50f;
+        fresh.conMoveX = 0.50f;
+        fresh.moveOwner = 7;
+        fresh.lookOwner = -1;
+        fresh.jumpOwner = -1;
+        fresh.whoZeroed = "";
+        ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+        hub.tickMotion(fresh);
+        org.junit.Assert.assertEquals("", hub.lastMotion().whoZeroed);
+        String dump = hub.buildDump("0.36.0", "flat", left, right, false);
+        int motionIdx = dump.indexOf("[MOTION_CORR]");
+        String motion = dump.substring(motionIdx);
+        assertTrue(motion.contains("0.5000"));
+        String[] lines = motion.split("\n");
+        int openMenuRows = 0;
+        int freshRows = 0;
+        for (String line : lines) {
+            if (line.contains("OPEN_MENU") && line.contains(",flat,")) {
+                openMenuRows++;
+            }
+            if (line.contains(",0.5000,") && !line.contains("OPEN_MENU")) {
+                freshRows++;
+            }
+        }
+        assertTrue("fresh bind row should not carry OPEN_MENU", freshRows >= 1);
+        assertTrue(openMenuRows <= 1);
+    }
+
+    @Test
+    public void identicalLagPatternFreezesRingEvenBeforeOpenMenu() {
+        DebugHub.MotionFrame frame = new DebugHub.MotionFrame();
+        frame.scheme = "flat";
+        frame.leftX = 0.9976f;
+        frame.leftY = -0.0690f;
+        frame.rightX = 0.40f;
+        frame.pubMoveX = 0.9976f;
+        frame.conMoveX = 0.9976f;
+        frame.moveOwner = 7;
+        frame.lookOwner = 11;
+        frame.jumpOwner = -1;
+        frame.sampleAgeMs = 8L;
+        for (int i = 0; i < 12; i++) {
+            frame.jniLagMs = 80L + 40L * i;
+            ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+            hub.tickMotion(frame);
+        }
+        hub.setPaused(true);
+        DebugHub.MotionFrame menu = new DebugHub.MotionFrame();
+        menu.scheme = "flat";
+        menu.whoZeroed = "OPEN_MENU";
+        ShadowSystemClock.advanceBy(Duration.ofMillis(16));
+        hub.tickMotion(menu);
+        String dump = hub.buildDump("0.36.0", "flat", left, right, false);
+        assertTrue(dump.contains("why=IDENTICAL_SAMPLE"));
+        assertTrue(dump.contains("latched=1"));
+        assertTrue(dump.contains("0.9976"));
+        String csv = dump.substring(dump.indexOf("t_ms,scheme"));
+        assertFalse(csv.contains("OPEN_MENU"));
+    }
+
+    @Test
     public void motionWithoutInputFreezesRingAndStampsLockup() {
         DebugHub.MotionFrame frame = new DebugHub.MotionFrame();
         frame.scheme = "flat";

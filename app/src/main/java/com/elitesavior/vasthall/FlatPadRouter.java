@@ -12,7 +12,8 @@ import java.util.Map;
  * revive, no nearest-stick rebind). UP clears that owner and zeros that
  * role. CANCEL / OUTSIDE / pause / focus-lost / scheme switch call
  * {@link #releaseAll}, which publishes zeros through the sink immediately.
- * Tick sample timeout and JNI lag with no fresh sample also force zeros.
+ * Tick sample timeout and JNI lag with no live pointers also force zeros.
+ * Identical/stale samples age out published axes while owners stay live.
  */
 final class FlatPadRouter {
     enum Target {
@@ -64,21 +65,41 @@ final class FlatPadRouter {
         final float originY;
         float axisX;
         float axisY;
+        float lastX;
+        float lastY;
         long lastSampleMs;
+        long lastEventTimeMs;
+        long lastFreshMs;
+        long lastFreshEventTimeMs;
+        boolean agedOut;
 
-        Bind(Target target, float originX, float originY, long lastSampleMs) {
+        Bind(Target target, float originX, float originY, long nowMs) {
             this.target = target;
             this.originX = originX;
             this.originY = originY;
-            this.lastSampleMs = lastSampleMs;
+            this.lastX = originX;
+            this.lastY = originY;
+            this.lastSampleMs = nowMs;
+            this.lastEventTimeMs = nowMs;
+            this.lastFreshMs = nowMs;
+            this.lastFreshEventTimeMs = nowMs;
         }
     }
 
     static final int INVALID_POINTER = -1;
-    /** Stick sample age that forces owner death (~80–120ms band). */
+    /** Stick sample age that forces owner death on an empty live set (~80–120ms). */
     static final long SAMPLE_TIMEOUT_MS = 100L;
-    /** Pump lag with no fresh sample that forces {@link #releaseAll}. */
+    /** Pump lag with no live pointers that forces {@link #releaseAll}. */
     static final long JNI_LAG_RELEASE_MS = 200L;
+    /** Identical xy / eventTime while owners live (~50–80ms). */
+    static final long IDENTICAL_STALE_MS = 64L;
+    /** Live-owner JNI lag / freshness age-out (~80–150ms). */
+    static final long JNI_LAG_AGEOUT_MS = 96L;
+    /** Held-still (no MOVE) keep-last then soft decay (~120–200ms). */
+    static final long HOLD_DECAY_MS = 160L;
+    static final float XY_DEADBAND_PX = 0.75f;
+    static final float HOLD_DECAY_FACTOR = 0.45f;
+    static final float AXIS_ZERO_EPS = 0.02f;
 
     private final Map<Integer, Bind> pointers = new LinkedHashMap<>();
     private Layout layout = new Layout();
@@ -92,6 +113,7 @@ final class FlatPadRouter {
     private boolean jumpDown;
     private String lastWhoZeroed = "";
     private long lastAnySampleMs;
+    private long lastAnyFreshMs;
 
     void setLayout(Layout layout) {
         this.layout = layout == null ? new Layout() : layout;
@@ -114,6 +136,10 @@ final class FlatPadRouter {
     }
 
     boolean down(int pointerId, float x, float y) {
+        return down(pointerId, x, y, now());
+    }
+
+    boolean down(int pointerId, float x, float y, long eventTimeMs) {
         if (pointerId == INVALID_POINTER || layout == null) {
             return false;
         }
@@ -129,8 +155,12 @@ final class FlatPadRouter {
         }
         long now = now();
         Bind bind = new Bind(hit, x, y, now);
+        bind.lastEventTimeMs = eventTimeMs;
+        bind.lastFreshEventTimeMs = eventTimeMs;
         pointers.put(pointerId, bind);
         lastAnySampleMs = now;
+        lastAnyFreshMs = now;
+        lastWhoZeroed = "";
         if (hit == Target.JUMP) {
             jumpDown = true;
         }
@@ -139,23 +169,38 @@ final class FlatPadRouter {
     }
 
     Target move(int pointerId, float x, float y) {
+        return move(pointerId, x, y, now(), 0L);
+    }
+
+    Target move(int pointerId, float x, float y, long eventTimeMs) {
+        return move(pointerId, x, y, eventTimeMs, 0L);
+    }
+
+    Target move(int pointerId, float x, float y, long eventTimeMs, long jniLagMs) {
         Bind bind = pointers.get(pointerId);
         if (bind == null) {
             return Target.NONE;
         }
         long now = now();
+        boolean fresh = isFresh(bind, x, y, eventTimeMs);
         bind.lastSampleMs = now;
+        bind.lastX = x;
+        bind.lastY = y;
+        bind.lastEventTimeMs = eventTimeMs;
         lastAnySampleMs = now;
-        if (bind.target == Target.MOVE || bind.target == Target.LOOK) {
-            applyStick(bind, x, y);
-            if (bind.target == Target.MOVE) {
-                moveX = bind.axisX;
-                moveY = bind.axisY;
-            } else {
-                lookX = bind.axisX;
-                lookY = bind.axisY;
+        if (fresh) {
+            bind.lastFreshMs = now;
+            bind.lastFreshEventTimeMs = eventTimeMs;
+            bind.agedOut = false;
+            lastAnyFreshMs = now;
+            lastWhoZeroed = "";
+            if (bind.target == Target.MOVE || bind.target == Target.LOOK) {
+                applyStick(bind, x, y);
+                writePublished(bind);
+                publish();
             }
-            publish();
+        } else if (bind.target == Target.MOVE || bind.target == Target.LOOK) {
+            ageOutBind(bind, pointerId, now, jniLagMs);
         }
         return bind.target;
     }
@@ -210,30 +255,37 @@ final class FlatPadRouter {
     }
 
     /**
-     * Latch-free sample. A watchdog tick with {@code liveIds == null} does
-     * not kill a held-still stick (Android does not send MOVE while a finger
-     * is stationary). Timeout / LAG require an empty live pointer set — the
-     * stream reported no fingers — plus a stale sample. A non-empty live set
-     * orphans owners missing from it immediately.
+     * Watchdog / pump tick. Empty live pointer set plus a stale sample still
+     * TIMEOUT/LAG-releases owners (v0.34). A non-empty live set orphans missing
+     * ids, then ages out stale published axes <em>without</em> requiring an
+     * empty pointer set. {@code liveIds == null} is the vsync pump: do not
+     * kill owners; still decay stale/identical samples.
      */
     void tick(long jniLagMs, int[] liveIds) {
         if (liveIds != null && liveIds.length > 0) {
             noteLivePointers(liveIds);
+        } else if (liveIds != null && liveIds.length == 0 && !pointers.isEmpty()) {
+            long now = now();
+            long sampleAge = lastAnyFreshMs <= 0L ? Long.MAX_VALUE : now - lastAnyFreshMs;
+            if (sampleAge <= SAMPLE_TIMEOUT_MS) {
+                return;
+            }
+            if (jniLagMs >= JNI_LAG_RELEASE_MS) {
+                releaseAll("LAG");
+                return;
+            }
+            releaseAll("TIMEOUT");
             return;
         }
-        if (pointers.isEmpty() || liveIds == null) {
+        if (pointers.isEmpty()) {
             return;
         }
         long now = now();
-        long sampleAge = lastAnySampleMs <= 0L ? Long.MAX_VALUE : now - lastAnySampleMs;
-        if (sampleAge <= SAMPLE_TIMEOUT_MS) {
-            return;
+        List<Map.Entry<Integer, Bind>> owned = new ArrayList<>(pointers.entrySet());
+        for (Map.Entry<Integer, Bind> entry : owned) {
+            ageOutBind(entry.getValue(), entry.getKey(), now, jniLagMs);
         }
-        if (jniLagMs >= JNI_LAG_RELEASE_MS) {
-            releaseAll("LAG");
-            return;
-        }
-        releaseAll("TIMEOUT");
+        publish();
     }
 
     void publish() {
@@ -316,7 +368,7 @@ final class FlatPadRouter {
         if (bind == null) {
             return 0L;
         }
-        long age = now() - bind.lastSampleMs;
+        long age = now() - bind.lastFreshMs;
         return Math.max(0L, age);
     }
 
@@ -331,6 +383,105 @@ final class FlatPadRouter {
             ids[i++] = pid;
         }
         return ids;
+    }
+
+    private boolean isFresh(Bind bind, float x, float y, long eventTimeMs) {
+        float dx = x - bind.lastX;
+        float dy = y - bind.lastY;
+        boolean xyChanged = Math.hypot(dx, dy) > XY_DEADBAND_PX;
+        if (!xyChanged) {
+            return false;
+        }
+        if (eventTimeMs > 0L && eventTimeMs < bind.lastFreshEventTimeMs) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean ageOutBind(Bind bind, int pointerId, long now, long jniLagMs) {
+        if (bind.target != Target.MOVE && bind.target != Target.LOOK) {
+            return false;
+        }
+        long freshAge = now - bind.lastFreshMs;
+        boolean hadIdenticalMove = bind.lastSampleMs > bind.lastFreshMs;
+        if (jniLagMs >= JNI_LAG_AGEOUT_MS && freshAge >= JNI_LAG_AGEOUT_MS) {
+            return forceRoleZero(bind, pointerId, "LAG");
+        }
+        if (hadIdenticalMove && freshAge >= IDENTICAL_STALE_MS) {
+            return forceRoleZero(bind, pointerId, "IDENTICAL_SAMPLE");
+        }
+        if (!hadIdenticalMove && freshAge >= HOLD_DECAY_MS) {
+            return softDecay(bind, pointerId);
+        }
+        return false;
+    }
+
+    private boolean forceRoleZero(Bind bind, int pointerId, String reason) {
+        float beforeX = publishedX(bind.target);
+        float beforeY = publishedY(bind.target);
+        bind.axisX = 0.0f;
+        bind.axisY = 0.0f;
+        bind.agedOut = true;
+        writePublished(bind);
+        if (Math.abs(beforeX) > AXIS_ZERO_EPS || Math.abs(beforeY) > AXIS_ZERO_EPS
+                || !reason.equals(lastWhoZeroed)) {
+            lastWhoZeroed = reason;
+            notifyZero(zoneName(bind.target), reason, pointerId, beforeX, beforeY);
+            publish();
+            return true;
+        }
+        lastWhoZeroed = reason;
+        return false;
+    }
+
+    private boolean softDecay(Bind bind, int pointerId) {
+        float beforeX = bind.axisX;
+        float beforeY = bind.axisY;
+        bind.axisX *= HOLD_DECAY_FACTOR;
+        bind.axisY *= HOLD_DECAY_FACTOR;
+        if (Math.abs(bind.axisX) < AXIS_ZERO_EPS) {
+            bind.axisX = 0.0f;
+        }
+        if (Math.abs(bind.axisY) < AXIS_ZERO_EPS) {
+            bind.axisY = 0.0f;
+        }
+        bind.agedOut = true;
+        writePublished(bind);
+        lastWhoZeroed = "STALE_SAMPLE";
+        if (Math.abs(beforeX) > AXIS_ZERO_EPS || Math.abs(beforeY) > AXIS_ZERO_EPS) {
+            notifyZero(zoneName(bind.target), "STALE_SAMPLE", pointerId, beforeX, beforeY);
+            publish();
+            return true;
+        }
+        return false;
+    }
+
+    private void writePublished(Bind bind) {
+        if (bind.target == Target.MOVE) {
+            moveX = bind.axisX;
+            moveY = bind.axisY;
+        } else if (bind.target == Target.LOOK) {
+            lookX = bind.axisX;
+            lookY = bind.axisY;
+        }
+    }
+
+    private float publishedX(Target target) {
+        return target == Target.MOVE ? moveX : lookX;
+    }
+
+    private float publishedY(Target target) {
+        return target == Target.MOVE ? moveY : lookY;
+    }
+
+    private static String zoneName(Target target) {
+        if (target == Target.MOVE) {
+            return "left";
+        }
+        if (target == Target.LOOK) {
+            return "right";
+        }
+        return "jump";
     }
 
     private void applyStick(Bind bind, float x, float y) {

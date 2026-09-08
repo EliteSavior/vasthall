@@ -26,6 +26,8 @@ final class MotionCorr {
 
     static final String WHY_MOTION_WITHOUT_INPUT = "MOTION_WITHOUT_INPUT";
     static final String WHY_STALE_AXIS = "STALE_AXIS";
+    static final String WHY_IDENTICAL_SAMPLE = "IDENTICAL_SAMPLE";
+    static final long IDENTICAL_LAG_HOLD_MS = 80L;
 
     static final String CSV_HEADER = "t_ms,scheme,left.x,left.y,right.x,right.y,jump,"
             + "ownM,ownL,ownJ,sampleAgeMs,whoZeroed,"
@@ -318,6 +320,9 @@ final class MotionCorr {
         }
 
         void freeze() {
+            if (frozenSlots != null) {
+                return;
+            }
             List<Sample> live = snapshot();
             frozenCount = live.size();
             frozenSlots = live.toArray(new Sample[0]);
@@ -426,6 +431,12 @@ final class MotionCorr {
         private boolean pauseSeen;
         private boolean pauseCleared;
         private boolean stamped;
+        private long identicalLagStart = -1L;
+        private float lastLeftX = Float.NaN;
+        private float lastLeftY = Float.NaN;
+        private float lastRightX = Float.NaN;
+        private float lastRightY = Float.NaN;
+        private long lastJniLagMs = -1L;
 
         void clear() {
             motionWithoutInputStart = -1L;
@@ -439,6 +450,12 @@ final class MotionCorr {
             pauseSeen = false;
             pauseCleared = false;
             stamped = false;
+            identicalLagStart = -1L;
+            lastLeftX = Float.NaN;
+            lastLeftY = Float.NaN;
+            lastRightX = Float.NaN;
+            lastRightY = Float.NaN;
+            lastJniLagMs = -1L;
         }
 
         void onPause(boolean paused) {
@@ -475,10 +492,26 @@ final class MotionCorr {
             } else {
                 staleAxisStart = -1L;
             }
+            boolean identicalLag = identicalLagPattern(sample);
+            if (identicalLag) {
+                if (identicalLagStart < 0L) {
+                    identicalLagStart = sample.tMs;
+                }
+            } else {
+                identicalLagStart = -1L;
+            }
+            lastLeftX = sample.leftX;
+            lastLeftY = sample.leftY;
+            lastRightX = sample.rightX;
+            lastRightY = sample.rightY;
+            lastJniLagMs = sample.jniLagMs;
             if (!latched) {
                 if (motionWithoutInputStart >= 0L
                         && sample.tMs - motionWithoutInputStart >= LATCH_HOLD_MS) {
                     latch(sample, WHY_MOTION_WITHOUT_INPUT, motionWithoutInputStart);
+                } else if (identicalLagStart >= 0L
+                        && sample.tMs - identicalLagStart >= IDENTICAL_LAG_HOLD_MS) {
+                    latch(sample, WHY_IDENTICAL_SAMPLE, identicalLagStart);
                 } else if (staleAxisStart >= 0L
                         && sample.tMs - staleAxisStart >= STALE_AXIS_HOLD_MS) {
                     latch(sample, WHY_STALE_AXIS, staleAxisStart);
@@ -520,6 +553,23 @@ final class MotionCorr {
             summary.pauseCleared = pauseCleared;
             summary.frozen = latched;
             return summary;
+        }
+
+        boolean looksLikeIdenticalLag() {
+            return identicalLagStart >= 0L || WHY_IDENTICAL_SAMPLE.equals(why);
+        }
+
+        private boolean identicalLagPattern(Sample sample) {
+            boolean ownersLive = !ownersEmpty(sample);
+            boolean axesLive = axesMag(sample) > AXIS_EPS;
+            boolean sameXy = !Float.isNaN(lastLeftX)
+                    && Math.abs(sample.leftX - lastLeftX) <= AXIS_EPS
+                    && Math.abs(sample.leftY - lastLeftY) <= AXIS_EPS
+                    && Math.abs(sample.rightX - lastRightX) <= AXIS_EPS
+                    && Math.abs(sample.rightY - lastRightY) <= AXIS_EPS;
+            boolean lagClimb = lastJniLagMs >= 0L && sample.jniLagMs > lastJniLagMs;
+            boolean lagHigh = sample.jniLagMs >= STALE_MS;
+            return ownersLive && axesLive && sameXy && (lagClimb || lagHigh);
         }
 
         private void latch(Sample sample, String reason, long firstMs) {

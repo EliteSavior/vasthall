@@ -149,7 +149,7 @@ public final class MotionCorrTest {
             watch.onSample(sample, false);
         }
         assertTrue(watch.latched());
-        assertEquals(MotionCorr.WHY_STALE_AXIS, watch.why());
+        assertEquals(MotionCorr.WHY_IDENTICAL_SAMPLE, watch.why());
         watch.onPause(true);
         MotionCorr.Sample quiet = base(400L);
         quiet.dtSec = 0.016f;
@@ -191,13 +191,52 @@ public final class MotionCorrTest {
     }
 
     @Test
-    public void frozenCsvDoesNotChangeAfterLaterPushes() {
+    public void identicalSamplePlusJniLagClimbLatchesBeforeMenu() {
+        MotionCorr.LatchWatch watch = new MotionCorr.LatchWatch();
+        MotionCorr.Ring ring = new MotionCorr.Ring(32);
+        for (int i = 0; i < 12; i++) {
+            MotionCorr.Sample sample = base(16L * i);
+            sample.moveOwner = 7;
+            sample.lookOwner = 11;
+            sample.leftX = 0.9976f;
+            sample.leftY = -0.0690f;
+            sample.rightX = 0.40f;
+            sample.pubMoveX = 0.9976f;
+            sample.conMoveX = 0.9976f;
+            sample.velX = 0.90f;
+            sample.sampleAgeMs = 8L;
+            sample.jniLagMs = 80L + 40L * i;
+            sample.dtSec = 0.016f;
+            sample.flags = MotionCorr.flags(sample);
+            ring.push(sample);
+            watch.onSample(sample, false);
+        }
+        assertTrue(watch.latched());
+        assertEquals(MotionCorr.WHY_IDENTICAL_SAMPLE, watch.why());
+        ring.freeze();
+        ring.freeze();
+        MotionCorr.Sample afterMenu = base(400L);
+        afterMenu.whoZeroed = "OPEN_MENU";
+        afterMenu.leftX = 0.0f;
+        ring.push(afterMenu);
+        String frozen = ring.frozenCsv();
+        assertTrue(frozen.contains("0.9976"));
+        assertFalse(frozen.contains("OPEN_MENU"));
+        String summary = MotionCorr.formatLatchSummary(watch.summary());
+        assertTrue(summary.contains("latched=1"));
+        assertTrue(summary.contains("why=IDENTICAL_SAMPLE"));
+    }
+
+    @Test
+    public void freezeIsStickyAndKeepsLatchWindow() {
         MotionCorr.Ring ring = new MotionCorr.Ring(16);
         MotionCorr.Sample first = base(10L);
         first.conMoveX = 0.80f;
         ring.push(first);
         ring.freeze();
         String frozen = ring.frozenCsv();
+        ring.freeze();
+        assertEquals(frozen, ring.frozenCsv());
         MotionCorr.Sample later = base(20L);
         later.conMoveX = 0.10f;
         ring.push(later);

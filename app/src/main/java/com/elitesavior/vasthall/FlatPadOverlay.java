@@ -112,6 +112,7 @@ final class FlatPadOverlay extends View {
                 notifyProbe(event, null);
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
+                requestUnbufferedDispatch(event);
                 bindPointer(event, event.getActionIndex());
                 notifyProbe(event, null);
                 return true;
@@ -172,7 +173,11 @@ final class FlatPadOverlay extends View {
                 if (index < 0 || !router.hasPointer(pid)) {
                     continue;
                 }
-                router.move(pid, event.getHistoricalX(index, h), event.getHistoricalY(index, h));
+                router.move(
+                        pid,
+                        event.getHistoricalX(index, h),
+                        event.getHistoricalY(index, h),
+                        event.getHistoricalEventTime(h));
             }
         }
         for (int i = 0; i < event.getPointerCount(); i++) {
@@ -181,7 +186,13 @@ final class FlatPadOverlay extends View {
             if (index < 0 || !router.hasPointer(pid)) {
                 continue;
             }
-            router.move(pid, event.getX(index), event.getY(index));
+            router.move(pid, event.getX(index), event.getY(index), event.getEventTime());
+        }
+        String aged = router.lastWhoZeroed();
+        if (who == null && ("IDENTICAL_SAMPLE".equals(aged)
+                || "LAG".equals(aged)
+                || "STALE_SAMPLE".equals(aged))) {
+            who = aged;
         }
         return who;
     }
@@ -190,7 +201,8 @@ final class FlatPadOverlay extends View {
         if (index < 0 || index >= event.getPointerCount()) {
             return;
         }
-        router.down(event.getPointerId(index), event.getX(index), event.getY(index));
+        router.down(event.getPointerId(index), event.getX(index), event.getY(index),
+                event.getEventTime());
         invalidate();
     }
 

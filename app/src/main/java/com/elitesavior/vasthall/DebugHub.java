@@ -188,6 +188,10 @@ final class DebugHub {
     }
 
     void setPaused(boolean paused) {
+        if (paused && !motionRing.frozen()
+                && (latchWatch.latched() || latchWatch.looksLikeIdenticalLag())) {
+            motionRing.freeze();
+        }
         this.paused = paused;
         latchWatch.onPause(paused);
     }
@@ -340,8 +344,11 @@ final class DebugHub {
         sample.lookOwner = frame.lookOwner;
         sample.jumpOwner = frame.jumpOwner;
         sample.sampleAgeMs = frame.sampleAgeMs;
-        sample.whoZeroed = frame.whoZeroed != null && !frame.whoZeroed.isEmpty()
-                ? frame.whoZeroed : lastWhoZeroed;
+        sample.whoZeroed = frame.whoZeroed == null ? "" : frame.whoZeroed;
+        if (sample.whoZeroed.isEmpty()
+                && (frame.moveOwner >= 0 || frame.lookOwner >= 0 || frame.jumpOwner >= 0)) {
+            lastWhoZeroed = "";
+        }
         sample.pubMoveX = frame.pubMoveX;
         sample.pubMoveY = frame.pubMoveY;
         sample.pubLookX = frame.pubLookX;

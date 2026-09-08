@@ -283,6 +283,43 @@ public final class StickViewTest {
     }
 
     @Test
+    public void pumpDoesNotRepublishFrozenDeflectionAfterSlowConsume() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger ones = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger zeros = new java.util.concurrent.atomic.AtomicInteger();
+        CountDownLatch sawZero = new CountDownLatch(1);
+        HudAxes axes = new HudAxes(new HudAxes.NativeSink() {
+            @Override
+            public void setMove(float x, float y) {
+                if (x == 1.0f) {
+                    ones.incrementAndGet();
+                    try {
+                        Thread.sleep(130);
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                    }
+                } else if (x == 0.0f && y == 0.0f) {
+                    zeros.incrementAndGet();
+                    sawZero.countDown();
+                }
+            }
+
+            @Override
+            public void setLook(float x, float y) {
+            }
+
+            @Override
+            public void setJump(boolean down) {
+            }
+        });
+        axes.setMove(1.0f, 0.0f);
+        axes.start();
+        assertTrue(sawZero.await(2, TimeUnit.SECONDS));
+        assertTrue("stale full deflection kept applying: ones=" + ones.get(), ones.get() <= 2);
+        assertTrue(zeros.get() >= 1);
+        axes.stop();
+    }
+
+    @Test
     public void publishedAxesAreVisibleBeforeConsumeAndConsumedMatchesLastApply() throws Exception {
         CountDownLatch applied = new CountDownLatch(1);
         HudAxes axes = new HudAxes(new HudAxes.NativeSink() {

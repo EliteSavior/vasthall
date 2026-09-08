@@ -194,15 +194,112 @@ public final class FlatPadRouterTest {
     }
 
     @Test
-    public void heldStickWithoutMoveSurvivesWatchdogTick() {
+    public void heldStickWithoutMoveKeepsAxesUntilHoldTimeoutThenSoftDecays() {
         clock.now = 1_000L;
         assertTrue(router.down(7, 100.0f, 200.0f));
         router.move(7, 171.0f, 200.0f);
-        clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 50L;
+        clock.now = 1_000L + 50L;
         router.tick(0L);
         assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
         assertEquals(1.0f, router.moveX(), EPSILON);
         assertEquals(1.0f, sink.moveX, EPSILON);
+
+        clock.now = 1_000L + FlatPadRouter.HOLD_DECAY_MS + 16L;
+        router.tick(0L);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertTrue("held-still should soft-decay after T_hold, was " + router.moveX(),
+                Math.abs(router.moveX()) < 1.0f);
+        assertEquals("STALE_SAMPLE", router.lastWhoZeroed());
+    }
+
+    @Test
+    public void identicalRepeatedSamplesDecayAxesWhileOwnerStaysLive() {
+        clock.now = 2_000L;
+        assertTrue(router.down(7, 100.0f, 200.0f));
+        router.move(7, 171.0f, 200.0f, 2_000L, 0L);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+
+        for (int i = 1; i <= 8; i++) {
+            clock.now = 2_000L + 16L * i;
+            router.move(7, 171.0f, 200.0f, 2_000L, 16L * i);
+        }
+        clock.now = 2_000L + FlatPadRouter.IDENTICAL_STALE_MS + 16L;
+        router.move(7, 171.0f, 200.0f, 2_000L, 0L);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals("IDENTICAL_SAMPLE", router.lastWhoZeroed());
+        assertTrue(router.sampleAgeMs(FlatPadRouter.Target.MOVE) >= FlatPadRouter.IDENTICAL_STALE_MS);
+    }
+
+    @Test
+    public void identicalSamplesWithClimbingJniLagForceZeroAsLag() {
+        clock.now = 3_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f, 3_000L, 0L);
+        clock.now = 3_000L + 32L;
+        router.move(7, 171.0f, 200.0f, 3_000L, 40L);
+        clock.now = 3_000L + FlatPadRouter.JNI_LAG_AGEOUT_MS;
+        router.tick(FlatPadRouter.JNI_LAG_AGEOUT_MS, new int[] {7});
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals("LAG", router.lastWhoZeroed());
+    }
+
+    @Test
+    public void freshMoveAfterIdenticalAgeOutRenewsAxesAndClearsWhoZeroed() {
+        clock.now = 4_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f, 4_000L, 0L);
+        clock.now = 4_000L + FlatPadRouter.IDENTICAL_STALE_MS + 16L;
+        router.move(7, 171.0f, 200.0f, 4_000L, 200L);
+        assertEquals("IDENTICAL_SAMPLE", router.lastWhoZeroed());
+        assertEquals(0.0f, router.moveX(), EPSILON);
+
+        clock.now = 4_200L;
+        router.move(7, 100.0f + 35.5f, 200.0f, 4_200L, 4L);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(0.5f, router.moveX(), 0.01f);
+        assertEquals("", router.lastWhoZeroed());
+    }
+
+    @Test
+    public void newestHistoryEventTimeIsFreshnessStamp() {
+        clock.now = 5_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 135.0f, 200.0f, 5_000L, 0L);
+        clock.now = 5_040L;
+        router.move(7, 171.0f, 200.0f, 5_040L, 0L);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        clock.now = 5_040L + 16L;
+        router.tick(4L);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertTrue(router.sampleAgeMs(FlatPadRouter.Target.MOVE) <= 16L);
+    }
+
+    @Test
+    public void identicalLeftAgesOutWhileFreshRightKeepsOwnerAndAxes() {
+        clock.now = 6_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f, 6_000L, 0L);
+        router.down(11, 700.0f, 200.0f);
+        router.move(11, 771.0f, 200.0f, 6_000L, 0L);
+        boolean sawIdentical = false;
+        for (int i = 1; i <= 8; i++) {
+            clock.now = 6_000L + 16L * i;
+            router.move(7, 171.0f, 200.0f, 6_000L, 0L);
+            if ("IDENTICAL_SAMPLE".equals(router.lastWhoZeroed())) {
+                sawIdentical = true;
+            }
+            router.move(11, 700.0f + 71.0f, 200.0f + i, 6_000L + 16L * i, 0L);
+        }
+        assertTrue(sawIdentical);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(11, router.ownerOf(FlatPadRouter.Target.LOOK));
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertTrue(Math.abs(router.lookX()) > 0.5f);
     }
 
     @Test

@@ -7,8 +7,9 @@ import java.util.concurrent.locks.LockSupport;
  * UI-thread MOVE stores axes here. A daemon pump is the only caller of the
  * blocking native setters, so the Vulkan engine mutex cannot stall touch.
  * The pump applies every tick (no change-detection skip, no 20 Hz cap).
- * {@link #setMove}/{@link #setLook}/{@link #setJump} unpark the pump
- * immediately so CANCEL zeros do not wait for the next vsync frame.
+ * After a slow native consume, the next tick applies zeros instead of
+ * republishing a frozen full-deflection vector. {@link #setMove}/{@link #setLook}/{@link #setJump}
+ * unpark the pump immediately so CANCEL zeros do not wait for the next vsync frame.
  */
 final class HudAxes {
     interface NativeSink {
@@ -16,6 +17,10 @@ final class HudAxes {
         void setLook(float x, float y);
         void setJump(boolean down);
     }
+
+    /** Live-owner lag gate; must match {@link FlatPadRouter#JNI_LAG_AGEOUT_MS}. */
+    static final long STALE_CONSUME_MS = 96L;
+    static final float AXIS_EPS = 0.04f;
 
     private final AtomicInteger moveX = new AtomicInteger(Float.floatToIntBits(0.0f));
     private final AtomicInteger moveY = new AtomicInteger(Float.floatToIntBits(0.0f));
@@ -31,20 +36,40 @@ final class HudAxes {
     private volatile boolean running;
     private volatile Thread pump;
     private volatile long lastNativeConsumeNs = System.nanoTime();
+    private volatile long lastChangeNs = System.nanoTime();
+    private volatile long lastConsumeDurationMs;
+    private int lastMoveBits = Float.floatToIntBits(0.0f);
+    private int lastMoveBitsY = Float.floatToIntBits(0.0f);
+    private int lastLookBits = Float.floatToIntBits(0.0f);
+    private int lastLookBitsY = Float.floatToIntBits(0.0f);
 
     HudAxes(NativeSink sink) {
         this.sink = sink;
     }
 
     void setMove(float x, float y) {
-        moveX.set(Float.floatToIntBits(x));
-        moveY.set(Float.floatToIntBits(y));
+        int bx = Float.floatToIntBits(x);
+        int by = Float.floatToIntBits(y);
+        if (bx != lastMoveBits || by != lastMoveBitsY) {
+            lastMoveBits = bx;
+            lastMoveBitsY = by;
+            lastChangeNs = System.nanoTime();
+        }
+        moveX.set(bx);
+        moveY.set(by);
         pulse();
     }
 
     void setLook(float x, float y) {
-        lookX.set(Float.floatToIntBits(x));
-        lookY.set(Float.floatToIntBits(y));
+        int bx = Float.floatToIntBits(x);
+        int by = Float.floatToIntBits(y);
+        if (bx != lastLookBits || by != lastLookBitsY) {
+            lastLookBits = bx;
+            lastLookBitsY = by;
+            lastChangeNs = System.nanoTime();
+        }
+        lookX.set(bx);
+        lookY.set(by);
         pulse();
     }
 
@@ -139,9 +164,25 @@ final class HudAxes {
             float lx = Float.intBitsToFloat(lookX.get());
             float ly = Float.intBitsToFloat(lookY.get());
             boolean down = jump.get() != 0;
+            long nowNs = System.nanoTime();
+            long staleMs = Math.max(0L, (nowNs - lastChangeNs) / 1_000_000L);
+            if (lastConsumeDurationMs >= STALE_CONSUME_MS && staleMs >= STALE_CONSUME_MS) {
+                if (Math.hypot(mx, my) > AXIS_EPS || Math.hypot(lx, ly) > AXIS_EPS) {
+                    mx = 0.0f;
+                    my = 0.0f;
+                    lx = 0.0f;
+                    ly = 0.0f;
+                    moveX.set(Float.floatToIntBits(0.0f));
+                    moveY.set(Float.floatToIntBits(0.0f));
+                    lookX.set(Float.floatToIntBits(0.0f));
+                    lookY.set(Float.floatToIntBits(0.0f));
+                }
+            }
+            long consumeStart = System.nanoTime();
             sink.setMove(mx, my);
             sink.setLook(lx, ly);
             sink.setJump(down);
+            lastConsumeDurationMs = Math.max(0L, (System.nanoTime() - consumeStart) / 1_000_000L);
             consumedMoveX.set(Float.floatToIntBits(mx));
             consumedMoveY.set(Float.floatToIntBits(my));
             consumedLookX.set(Float.floatToIntBits(lx));

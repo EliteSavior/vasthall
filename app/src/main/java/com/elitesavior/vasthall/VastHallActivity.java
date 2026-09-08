@@ -1040,7 +1040,7 @@ public final class VastHallActivity extends Activity implements
         String scheme = schemeGate == null
                 ? (dual ? SCHEME_DUAL : SCHEME_LEGACY)
                 : schemeGate.current().prefValue();
-        String version = "0.35.0";
+        String version = "0.36.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
