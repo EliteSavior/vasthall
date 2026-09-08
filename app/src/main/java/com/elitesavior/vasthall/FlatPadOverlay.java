@@ -11,6 +11,9 @@ import android.view.ViewParent;
 /**
  * Single full-screen touch consumer for New pad. Sticks and jump are drawn
  * here; hits are {@link FlatPadRouter} math rects, not nested View children.
+ * HUD children do not steal UP. MOVE ownership is pointerId +
+ * {@link MotionEvent#findPointerIndex(int)} only — never
+ * {@link MotionEvent#getActionIndex()} (always 0 on MOVE).
  */
 final class FlatPadOverlay extends View {
     private final FlatPadRouter router;
@@ -18,6 +21,7 @@ final class FlatPadOverlay extends View {
     private final Paint knobPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint jumpFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint jumpText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private StickView.Probe probe;
     private String jumpLabel = "Jump";
     private float jumpSize;
     private float jumpRightMargin;
@@ -43,6 +47,10 @@ final class FlatPadOverlay extends View {
 
     FlatPadRouter router() {
         return router;
+    }
+
+    void setProbe(StickView.Probe probe) {
+        this.probe = probe;
     }
 
     void setJumpChrome(float sizePx, float rightMarginPx, float bottomMarginPx, String label) {
@@ -96,41 +104,129 @@ final class FlatPadOverlay extends View {
             parent.requestDisallowInterceptTouchEvent(true);
         }
         int masked = event.getActionMasked();
+        String whoZeroed = null;
         switch (masked) {
             case MotionEvent.ACTION_DOWN:
                 requestUnbufferedDispatch(event);
                 bindPointer(event, event.getActionIndex());
+                notifyProbe(event, null);
                 return true;
             case MotionEvent.ACTION_POINTER_DOWN:
                 bindPointer(event, event.getActionIndex());
+                notifyProbe(event, null);
                 return true;
             case MotionEvent.ACTION_MOVE:
-                for (int i = 0; i < event.getPointerCount(); i++) {
-                    int pid = event.getPointerId(i);
-                    if (router.hasPointer(pid)) {
-                        router.move(pid, event.getX(i), event.getY(i));
-                    }
-                }
+                whoZeroed = applyMove(event);
                 invalidate();
+                notifyProbe(event, whoZeroed);
                 return true;
             case MotionEvent.ACTION_POINTER_UP:
             case MotionEvent.ACTION_UP:
                 int lift = event.getActionIndex();
-                router.up(event.getPointerId(lift), "UP");
+                int liftPid = event.getPointerId(lift);
+                if (router.hasPointer(liftPid)) {
+                    router.up(liftPid, "UP");
+                    whoZeroed = "UP";
+                }
+                router.noteLivePointers(remainingPointerIds(event, liftPid));
+                if ("ORPHAN".equals(router.lastWhoZeroed()) && whoZeroed == null) {
+                    whoZeroed = "ORPHAN";
+                }
                 invalidate();
+                notifyProbe(event, whoZeroed);
                 return true;
             case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_OUTSIDE:
                 router.releaseAll("CANCEL");
                 invalidate();
+                notifyProbe(event, "CANCEL");
                 return true;
             default:
+                notifyProbe(event, null);
                 return true;
         }
     }
 
+    /**
+     * Drain historical MOVE samples then the current sample. Ownership is
+     * always pointerId + findPointerIndex — getActionIndex is not used.
+     */
+    private String applyMove(MotionEvent event) {
+        String who = null;
+        int[] live = new int[event.getPointerCount()];
+        for (int i = 0; i < event.getPointerCount(); i++) {
+            live[i] = event.getPointerId(i);
+        }
+        if (router.anyPressed()) {
+            String before = router.lastWhoZeroed();
+            router.noteLivePointers(live);
+            if ("ORPHAN".equals(router.lastWhoZeroed()) && !before.equals("ORPHAN")) {
+                who = "ORPHAN";
+            }
+        }
+        int history = event.getHistorySize();
+        for (int h = 0; h < history; h++) {
+            for (int i = 0; i < event.getPointerCount(); i++) {
+                int pid = event.getPointerId(i);
+                int index = event.findPointerIndex(pid);
+                if (index < 0 || !router.hasPointer(pid)) {
+                    continue;
+                }
+                router.move(pid, event.getHistoricalX(index, h), event.getHistoricalY(index, h));
+            }
+        }
+        for (int i = 0; i < event.getPointerCount(); i++) {
+            int pid = event.getPointerId(i);
+            int index = event.findPointerIndex(pid);
+            if (index < 0 || !router.hasPointer(pid)) {
+                continue;
+            }
+            router.move(pid, event.getX(index), event.getY(index));
+        }
+        return who;
+    }
+
     private void bindPointer(MotionEvent event, int index) {
+        if (index < 0 || index >= event.getPointerCount()) {
+            return;
+        }
         router.down(event.getPointerId(index), event.getX(index), event.getY(index));
         invalidate();
+    }
+
+    private static int[] remainingPointerIds(MotionEvent event, int liftPid) {
+        int count = event.getPointerCount();
+        int remain = 0;
+        for (int i = 0; i < count; i++) {
+            if (event.getPointerId(i) != liftPid) {
+                remain++;
+            }
+        }
+        int[] ids = new int[remain];
+        int n = 0;
+        for (int i = 0; i < count; i++) {
+            int pid = event.getPointerId(i);
+            if (pid != liftPid) {
+                ids[n++] = pid;
+            }
+        }
+        return ids;
+    }
+
+    private void notifyProbe(MotionEvent event, String whoZeroed) {
+        if (probe == null) {
+            return;
+        }
+        probe.onTouch(
+                "pad",
+                event,
+                whoZeroed);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        router.releaseAll("DETACH");
+        super.onDetachedFromWindow();
     }
 
     @Override

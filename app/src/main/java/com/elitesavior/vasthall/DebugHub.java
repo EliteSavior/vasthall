@@ -288,7 +288,7 @@ final class DebugHub {
             StickView left,
             StickView right,
             boolean jump) {
-        return buildDump(versionName, scheme, left, right, jump, null);
+        return buildDump(versionName, scheme, left, right, jump, null, null);
     }
 
     String buildDump(
@@ -298,6 +298,17 @@ final class DebugHub {
             StickView right,
             boolean jump,
             World world) {
+        return buildDump(versionName, scheme, left, right, jump, world, null);
+    }
+
+    String buildDump(
+            String versionName,
+            String scheme,
+            StickView left,
+            StickView right,
+            boolean jump,
+            World world,
+            FlatPadRouter flatPad) {
         pruneZeros();
         StringBuilder out = new StringBuilder(2048);
         out.append("VASTHALL_DEBUG v1\n");
@@ -309,7 +320,7 @@ final class DebugHub {
 
         out.append("[CONTROLS]\n");
         if (controlsOn() || !on()) {
-            appendControls(out, scheme, left, right, jump);
+            appendControls(out, scheme, left, right, jump, flatPad);
         } else {
             out.append("skipped=off\n");
         }
@@ -393,20 +404,81 @@ final class DebugHub {
             String scheme,
             StickView left,
             StickView right,
-            boolean jump) {
+            boolean jump,
+            FlatPadRouter flatPad) {
         out.append("scheme=").append(scheme).append('\n');
-        appendZone(out, "left", left);
-        appendZone(out, "right", right);
+        if (flatPad != null && "flat".equals(scheme)) {
+            appendFocusZones(out, flatPad);
+        } else {
+            appendZone(out, "left", left);
+            appendZone(out, "right", right);
+        }
         out.append("jump=").append(jump ? 1 : 0).append('\n');
-        boolean stuck = stuck(left) || stuck(right);
+        boolean stuck = stuck(left) || stuck(right) || stuck(flatPad);
         out.append("stuckHint=").append(stuck ? 1 : 0).append('\n');
         out.append("jniLagMs=").append(jniLagMs).append('\n');
+        if (flatPad != null) {
+            appendFocus(out, flatPad);
+        }
+    }
+
+    private static void appendFocusZones(StringBuilder out, FlatPadRouter flatPad) {
+        appendFocusZone(out, "left", FlatPadRouter.Target.MOVE, flatPad);
+        appendFocusZone(out, "right", FlatPadRouter.Target.LOOK, flatPad);
+    }
+
+    private static void appendFocusZone(
+            StringBuilder out, String name, FlatPadRouter.Target target, FlatPadRouter flatPad) {
+        int pid = flatPad.ownerOf(target);
+        float axisX = target == FlatPadRouter.Target.MOVE ? flatPad.moveX() : flatPad.lookX();
+        float axisY = target == FlatPadRouter.Target.MOVE ? flatPad.moveY() : flatPad.lookY();
+        out.append(name).append(".axis=")
+                .append(fmt(axisX)).append(',').append(fmt(axisY)).append('\n');
+        out.append(name).append(".active=").append(pid == FlatPadRouter.INVALID_POINTER ? 0 : 1)
+                .append('\n');
+        out.append(name).append(".pointerId=").append(pid).append('\n');
+        if (pid == FlatPadRouter.INVALID_POINTER) {
+            out.append(name).append(".origin=0,0\n");
+            out.append(name).append(".knob=0,0\n");
+        } else {
+            float r = Math.max(flatPad.layout().stickRadius, 1.0f);
+            out.append(name).append(".origin=")
+                    .append(fmt(flatPad.originX(pid))).append(',')
+                    .append(fmt(flatPad.originY(pid))).append('\n');
+            out.append(name).append(".knob=")
+                    .append(fmt(flatPad.originX(pid) + flatPad.axisX(pid) * r)).append(',')
+                    .append(fmt(flatPad.originY(pid) + flatPad.axisY(pid) * r)).append('\n');
+        }
+    }
+
+    private static void appendFocus(StringBuilder out, FlatPadRouter flatPad) {
+        out.append("move.ownerId=").append(flatPad.ownerOf(FlatPadRouter.Target.MOVE)).append('\n');
+        out.append("move.axis=")
+                .append(fmt(flatPad.moveX())).append(',').append(fmt(flatPad.moveY())).append('\n');
+        out.append("move.sampleAgeMs=").append(flatPad.sampleAgeMs(FlatPadRouter.Target.MOVE)).append('\n');
+        out.append("look.ownerId=").append(flatPad.ownerOf(FlatPadRouter.Target.LOOK)).append('\n');
+        out.append("look.axis=")
+                .append(fmt(flatPad.lookX())).append(',').append(fmt(flatPad.lookY())).append('\n');
+        out.append("look.sampleAgeMs=").append(flatPad.sampleAgeMs(FlatPadRouter.Target.LOOK)).append('\n');
+        out.append("jump.ownerId=").append(flatPad.ownerOf(FlatPadRouter.Target.JUMP)).append('\n');
+        out.append("lastWhoZeroed=").append(flatPad.lastWhoZeroed()).append('\n');
     }
 
     private static boolean stuck(StickView zone) {
         return zone != null
                 && !zone.hasActiveFinger()
                 && (zone.axisX() != 0.0f || zone.axisY() != 0.0f);
+    }
+
+    private static boolean stuck(FlatPadRouter flatPad) {
+        if (flatPad == null) {
+            return false;
+        }
+        boolean moveStuck = flatPad.ownerOf(FlatPadRouter.Target.MOVE) == FlatPadRouter.INVALID_POINTER
+                && (flatPad.moveX() != 0.0f || flatPad.moveY() != 0.0f);
+        boolean lookStuck = flatPad.ownerOf(FlatPadRouter.Target.LOOK) == FlatPadRouter.INVALID_POINTER
+                && (flatPad.lookX() != 0.0f || flatPad.lookY() != 0.0f);
+        return moveStuck || lookStuck;
     }
 
     private static void appendZone(StringBuilder out, String name, StickView zone) {
@@ -526,6 +598,9 @@ final class DebugHub {
         }
         if ("menu".equals(zone)) {
             return "MENU";
+        }
+        if ("pad".equals(zone)) {
+            return "PAD";
         }
         return "OTHER";
     }

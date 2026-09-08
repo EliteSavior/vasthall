@@ -12,11 +12,14 @@ public final class FlatPadRouterTest {
 
     private FlatPadRouter router;
     private RecordingSink sink;
+    private FakeClock clock;
 
     @Before
     public void setUp() {
+        clock = new FakeClock();
         sink = new RecordingSink();
         router = new FlatPadRouter();
+        router.setNowMs(clock);
         router.setSink(sink);
         router.setLayout(playLayout());
     }
@@ -125,6 +128,136 @@ public final class FlatPadRouterTest {
     }
 
     @Test
+    public void occupiedMoveRejectsSecondFingerAndUnboundMoveDoesNotUpdateOwner() {
+        assertTrue(router.down(7, 100.0f, 200.0f));
+        router.move(7, 171.0f, 200.0f);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+
+        assertFalse(router.down(8, 120.0f, 220.0f));
+        assertFalse(router.hasPointer(8));
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+
+        assertEquals(FlatPadRouter.Target.NONE, router.move(8, 171.0f, 271.0f));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, router.moveY(), EPSILON);
+        assertEquals(FlatPadRouter.Target.MOVE, router.targetOf(7));
+    }
+
+    @Test
+    public void cancelWithThreePointersMidDeflectionZerosAllAndPublishesImmediately() {
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f);
+        router.down(11, 700.0f, 200.0f);
+        router.move(11, 771.0f, 200.0f);
+        router.down(3, 820.0f, 500.0f);
+        assertEquals(1.0f, sink.moveX, EPSILON);
+        assertEquals(1.0f, sink.lookX, EPSILON);
+        assertTrue(sink.jump);
+        int publishesBefore = sink.publishes;
+
+        router.releaseAll("CANCEL");
+        assertTrue(sink.publishes > publishesBefore);
+        assertEquals("CANCEL", router.lastWhoZeroed());
+        assertFalse(router.anyPressed());
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals(0.0f, sink.moveY, EPSILON);
+        assertEquals(0.0f, sink.lookX, EPSILON);
+        assertEquals(0.0f, sink.lookY, EPSILON);
+        assertFalse(sink.jump);
+        assertEquals(FlatPadRouter.INVALID_POINTER, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(FlatPadRouter.INVALID_POINTER, router.ownerOf(FlatPadRouter.Target.LOOK));
+        assertEquals(FlatPadRouter.INVALID_POINTER, router.ownerOf(FlatPadRouter.Target.JUMP));
+    }
+
+    @Test
+    public void missingLiveIndexOrphansOwnerAndZerosThatRole() {
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f);
+        router.down(11, 700.0f, 200.0f);
+        router.move(11, 771.0f, 200.0f);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(1.0f, router.lookX(), EPSILON);
+
+        router.noteLivePointers(new int[] {11});
+        assertFalse(router.hasPointer(7));
+        assertEquals("ORPHAN", router.lastWhoZeroed());
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals(11, router.ownerOf(FlatPadRouter.Target.LOOK));
+        assertEquals(1.0f, router.lookX(), EPSILON);
+
+        router.noteLivePointers(new int[] {99});
+        assertFalse(router.hasPointer(11));
+        assertEquals(0.0f, router.lookX(), EPSILON);
+        assertEquals(0.0f, sink.lookX, EPSILON);
+    }
+
+    @Test
+    public void heldStickWithoutMoveSurvivesWatchdogTick() {
+        clock.now = 1_000L;
+        assertTrue(router.down(7, 100.0f, 200.0f));
+        router.move(7, 171.0f, 200.0f);
+        clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 50L;
+        router.tick(0L);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(1.0f, sink.moveX, EPSILON);
+    }
+
+    @Test
+    public void sampleTimeoutForcesStickZeroWhenLiveSetIsEmpty() {
+        clock.now = 1_000L;
+        assertTrue(router.down(7, 100.0f, 200.0f));
+        router.move(7, 171.0f, 200.0f);
+        assertEquals(1.0f, router.moveX(), EPSILON);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+
+        clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS;
+        router.tick(0L, new int[0]);
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+
+        clock.now = 1_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 1L;
+        router.tick(0L, new int[0]);
+        assertFalse(router.hasPointer(7));
+        assertEquals(FlatPadRouter.INVALID_POINTER, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(0.0f, router.moveX(), EPSILON);
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals("TIMEOUT", router.lastWhoZeroed());
+        assertEquals(0L, router.sampleAgeMs(FlatPadRouter.Target.MOVE));
+    }
+
+    @Test
+    public void freshSampleKeepsOwnerEvenWhenJniLagIsHigh() {
+        clock.now = 5_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f);
+        clock.now = 5_016L;
+        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS + 50L, new int[] {7});
+        assertEquals(7, router.ownerOf(FlatPadRouter.Target.MOVE));
+        assertEquals(1.0f, router.moveX(), EPSILON);
+    }
+
+    @Test
+    public void staleSampleAndJniLagReleasesAllWithForcedZero() {
+        clock.now = 8_000L;
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f);
+        router.down(11, 700.0f, 200.0f);
+        router.move(11, 771.0f, 200.0f);
+        router.down(3, 820.0f, 500.0f);
+
+        clock.now = 8_000L + FlatPadRouter.SAMPLE_TIMEOUT_MS + 1L;
+        router.tick(FlatPadRouter.JNI_LAG_RELEASE_MS, new int[0]);
+        assertEquals("LAG", router.lastWhoZeroed());
+        assertFalse(router.anyPressed());
+        assertEquals(0.0f, sink.moveX, EPSILON);
+        assertEquals(0.0f, sink.lookX, EPSILON);
+        assertFalse(sink.jump);
+    }
+
+    @Test
     public void settingsExposeExactlyLegacyTouchLegacyPadAndNewPad() {
         ControlScheme[] options = ControlScheme.settingsOrder();
         assertEquals(3, options.length);
@@ -138,6 +271,8 @@ public final class FlatPadRouterTest {
         assertEquals("legacy", ControlScheme.LEGACY_TOUCH.prefValue());
         assertEquals("dual", ControlScheme.LEGACY_PAD.prefValue());
         assertEquals("flat", ControlScheme.NEW_PAD.prefValue());
+        assertFalse(ControlScheme.NEW_PAD.prefValue().equals("legacy"));
+        assertFalse(ControlScheme.NEW_PAD.prefValue().equals("dual"));
     }
 
     private static FlatPadRouter.Layout playLayout() {
@@ -152,17 +287,28 @@ public final class FlatPadRouterTest {
         return layout;
     }
 
+    private static final class FakeClock implements FlatPadRouter.NowMs {
+        long now = 1L;
+
+        @Override
+        public long nowMs() {
+            return now;
+        }
+    }
+
     private static final class RecordingSink implements FlatPadRouter.Sink {
         float moveX;
         float moveY;
         float lookX;
         float lookY;
         boolean jump;
+        int publishes;
 
         @Override
         public void setMove(float x, float y) {
             moveX = x;
             moveY = y;
+            publishes++;
         }
 
         @Override
