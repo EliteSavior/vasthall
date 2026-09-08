@@ -7,6 +7,8 @@ import java.util.concurrent.locks.LockSupport;
  * UI-thread MOVE stores axes here. A daemon pump is the only caller of the
  * blocking native setters, so the Vulkan engine mutex cannot stall touch.
  * The pump applies every tick (no change-detection skip, no 20 Hz cap).
+ * {@link #setMove}/{@link #setLook}/{@link #setJump} unpark the pump
+ * immediately so CANCEL zeros do not wait for the next vsync frame.
  */
 final class HudAxes {
     interface NativeSink {

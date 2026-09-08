@@ -131,6 +131,37 @@ public final class DebugHubTest {
     }
 
     @Test
+    public void focusDumpIncludesOwnerSampleAgeAndWhoZeroed() {
+        FlatPadRouter router = new FlatPadRouter();
+        FlatPadRouter.Layout layout = new FlatPadRouter.Layout();
+        layout.width = 1000.0f;
+        layout.height = 600.0f;
+        layout.stickRadius = 71.0f;
+        layout.jumpLeft = 800.0f;
+        layout.jumpTop = 480.0f;
+        layout.jumpRight = 872.0f;
+        layout.jumpBottom = 552.0f;
+        router.setLayout(layout);
+        router.down(7, 100.0f, 200.0f);
+        router.move(7, 171.0f, 200.0f);
+        router.up(7, "TIMEOUT");
+        hub.onZero("left", "TIMEOUT", 7, 1.0f, 0.0f);
+        hub.onZero("right", "ORPHAN", 11, 0.5f, 0.0f);
+        hub.onZero("both", "LAG", -1, 0.0f, 0.0f);
+        String dump = hub.buildDump("0.34.0", "flat", left, right, false, null, router);
+        assertTrue(dump.contains("scheme=flat"));
+        assertTrue(dump.contains("move.ownerId=-1"));
+        assertTrue(dump.contains("move.sampleAgeMs=0"));
+        assertTrue(dump.contains("look.ownerId=-1"));
+        assertTrue(dump.contains("look.sampleAgeMs=0"));
+        assertTrue(dump.contains("jump.ownerId=-1"));
+        assertTrue(dump.contains("lastWhoZeroed=TIMEOUT"));
+        assertTrue(dump.contains("whoZeroed=TIMEOUT"));
+        assertTrue(dump.contains("whoZeroed=ORPHAN"));
+        assertTrue(dump.contains("whoZeroed=LAG"));
+    }
+
+    @Test
     public void engineDumpIncludesWorldActors() {
         World world = new World();
         world.spawnActor(PlayerPawn.class);

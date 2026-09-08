@@ -103,6 +103,8 @@ public final class VastHallActivity extends Activity implements
                 hudAxes.pulse();
             }
             if (schemeGate != null && schemeGate.newPadEnabled() && flatPad != null) {
+                long lag = hudAxes == null ? 0L : hudAxes.jniLagMs();
+                flatPad.tick(lag);
                 flatPad.publish();
             }
             tickWorld(frameTimeNanos);
@@ -269,6 +271,11 @@ public final class VastHallActivity extends Activity implements
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
         flatPad = new FlatPadRouter();
+        flatPad.setProbe((zone, reason, ptr, ax, ay) -> {
+            if (debugHub != null) {
+                debugHub.onZero(zone, reason, ptr, ax, ay);
+            }
+        });
         flatPad.setSink(new FlatPadRouter.Sink() {
             @Override
             public void setMove(float x, float y) {
@@ -292,6 +299,7 @@ public final class VastHallActivity extends Activity implements
             }
         });
         flatOverlay = new FlatPadOverlay(this, flatPad);
+        flatOverlay.setProbe(this);
         flatOverlay.setJumpChrome(dp(72), dp(186), dp(48), getString(R.string.jump));
         root.addView(flatOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -437,14 +445,22 @@ public final class VastHallActivity extends Activity implements
         if (debugHub == null) {
             return;
         }
-        debugHub.onTouch(
-                zone,
-                event,
-                whoZeroed,
-                leftZone == null ? 0.0f : leftZone.axisX(),
-                leftZone == null ? 0.0f : leftZone.axisY(),
-                rightZone == null ? 0.0f : rightZone.axisX(),
-                rightZone == null ? 0.0f : rightZone.axisY());
+        float axisLx;
+        float axisLy;
+        float axisRx;
+        float axisRy;
+        if (schemeGate != null && schemeGate.newPadEnabled() && flatPad != null) {
+            axisLx = flatPad.moveX();
+            axisLy = flatPad.moveY();
+            axisRx = flatPad.lookX();
+            axisRy = flatPad.lookY();
+        } else {
+            axisLx = leftZone == null ? 0.0f : leftZone.axisX();
+            axisLy = leftZone == null ? 0.0f : leftZone.axisY();
+            axisRx = rightZone == null ? 0.0f : rightZone.axisX();
+            axisRy = rightZone == null ? 0.0f : rightZone.axisY();
+        }
+        debugHub.onTouch(zone, event, whoZeroed, axisLx, axisLy, axisRx, axisRy);
     }
 
     @Override
@@ -962,12 +978,13 @@ public final class VastHallActivity extends Activity implements
         String scheme = schemeGate == null
                 ? (dual ? SCHEME_DUAL : SCHEME_LEGACY)
                 : schemeGate.current().prefValue();
-        String version = "0.33.0";
+        String version = "0.34.0";
         try {
             version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        return debugHub.buildDump(version, scheme, leftZone, rightZone, debugHub.jumpDown(), world);
+        return debugHub.buildDump(
+                version, scheme, leftZone, rightZone, debugHub.jumpDown(), world, flatPad);
     }
 
     private void copyDump() {

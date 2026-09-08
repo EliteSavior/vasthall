@@ -3,7 +3,8 @@ package com.elitesavior.vasthall;
 /**
  * Play-time control schemes. Pref values for the two older options stay
  * stable ({@code legacy}, {@code dual}) so existing installs keep their
- * choice. New pad is the Flat router only.
+ * choice. New pad is the Flat router with exclusive pointer-focus
+ * ownership, CANCEL-complete JNI zero flush, and tick sample timeout.
  */
 enum ControlScheme {
     LEGACY_TOUCH("legacy", "Legacy touch"),
