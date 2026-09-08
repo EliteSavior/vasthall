@@ -3,15 +3,15 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.33-hall`
-- Source version: `0.33.0` (New pad Flat router + three control schemes on the v0.32 GameplayTags stack; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (473146 bytes, md5 `30486e1c00fb17f16d27f80a4f496130`)
+- Tag: `v0.34-hall`
+- Source version: `0.34.0` (New pad focus ownership + CANCEL JNI zero flush + tick sample timeout on the v0.33 Flat router / three control schemes; see [ENGINE.md](ENGINE.md))
+- File: `VastHall-v0-foss.apk` (478642 bytes, md5 `1977b71f77b5c85d6e8cbff18c0f8ed7`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.33-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.34-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.33-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.34-hall/VastHall-v0-foss.apk
 
 Clean install (signing may differ from older drops):
 
@@ -21,7 +21,7 @@ adb uninstall com.elitesavior.vasthall && adb install VastHall-v0-foss.apk
 
 This repo is the public sideload drop.
 
-Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router; Legacy touch and Legacy pad keep their existing backends.
+Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router with exclusive pointer-focus ownership (one `ownerPointerId` per Move/Look/Jump), CANCEL-complete JNI zero flush, and tick sample timeout/decay. Legacy touch and Legacy pad keep their existing backends.
 
 ## Build this source
 
