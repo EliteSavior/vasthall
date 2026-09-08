@@ -3,14 +3,14 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.32-hall`
-- File: `VastHall-v0-foss.apk` (461570 bytes, md5 `606d930dc0d9a4e8382b6870fd2a132d`)
+- Tag: `v0.33-hall`
+- File: `VastHall-v0-foss.apk` (473146 bytes, md5 `30486e1c00fb17f16d27f80a4f496130`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.32-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.33-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.32-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.33-hall/VastHall-v0-foss.apk
 
 Clean install (signing may differ from older drops):
 
@@ -19,3 +19,5 @@ adb uninstall com.elitesavior.vasthall && adb install VastHall-v0-foss.apk
 ```
 
 This repo is the public sideload drop.
+
+Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**.
