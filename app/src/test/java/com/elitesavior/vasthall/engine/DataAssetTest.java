@@ -94,7 +94,7 @@ public final class DataAssetTest {
     public void demoCatalogRegistersHallBladeAndMappingAsDataAssets() {
         registry.registerDemoAssets();
 
-        assertEquals(6, registry.size());
+        assertEquals(7, registry.size());
         WeaponDataAsset blade = registry.requireDataAsset(
                 AssetRegistry.HALL_BLADE_ID, WeaponDataAsset.class);
         assertEquals(AssetRegistry.HALL_BLADE_PATH, registry.require(AssetRegistry.HALL_BLADE_ID).path());

@@ -28,4 +28,6 @@
     <string name="console_run">Run</string>
     <string name="console_hint">command (help, actors, assets, load Hall)</string>
     <string name="console_tilde">~</string>
+    <string name="iso_sandbox">Iso Sandbox</string>
+    <string name="hall_mode">Hall</string>
 </resources>

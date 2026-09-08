@@ -17,6 +17,8 @@ import java.util.Map;
 public final class AssetRegistry {
     public static final String HALL_LEVEL_ID = "Hall";
     public static final String HALL_LEVEL_PATH = LevelDefinition.HALL_RESOURCE;
+    public static final String ISO_SANDBOX_LEVEL_ID = "IsoSandbox";
+    public static final String ISO_SANDBOX_LEVEL_PATH = LevelDefinition.ISO_SANDBOX_RESOURCE;
     public static final String HALL_MESH_ID = "HallMesh";
     public static final String HALL_MESH_PATH = "/Game/Meshes/Hall";
     public static final String HALL_BEACON_TEXTURE_ID = "HallBeaconTexture";
@@ -38,12 +40,13 @@ public final class AssetRegistry {
     }
 
     /**
-     * Built-in Hall sample: classpath {@code levels/Hall.json} plus mesh /
-     * texture / audio stubs, the default Input Mapping Context, and the
-     * HallBlade weapon DataAsset.
+     * Built-in Hall sample plus Iso Sandbox: classpath {@code levels/Hall.json}
+     * and {@code levels/IsoSandbox.json}, mesh / texture / audio stubs, the
+     * default Input Mapping Context, and the HallBlade weapon DataAsset.
      */
     public void registerDemoAssets() {
         registerLevel(LevelDefinition.hall());
+        registerLevel(LevelDefinition.isoSandbox());
         register(HALL_MESH_ID, HALL_MESH_PATH, AssetKind.MESH, new MeshHandle(HALL_MESH_ID));
         register(
                 HALL_BEACON_TEXTURE_ID,

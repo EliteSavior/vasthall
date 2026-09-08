@@ -3,15 +3,15 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.36-hall`
-- Source version: `0.36.0` (New pad stale-sample age-out while owners live, on the v0.35 motion-corr tip; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (509602 bytes, md5 `2e23eae476f735cb54f26fc6dc45cc83`)
+- Tag: `v0.37-hall`
+- Source version: `0.37.0` (Iso I — Camera & Grid: Iso Sandbox GameMode with orthographic isometric grid, pan, and zoom; see [ENGINE.md](ENGINE.md))
+- File: `VastHall-v0-foss.apk` (526374 bytes, md5 `ed062713cee933b986566552e1dfeaa3`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.36-hall).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.37-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.36-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.37-hall/VastHall-v0-foss.apk
 
 Clean install (signing may differ from older drops):
 
@@ -21,7 +21,18 @@ adb uninstall com.elitesavior.vasthall && adb install VastHall-v0-foss.apk
 
 This repo is the public sideload drop.
 
-Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router with exclusive pointer-focus ownership (one `ownerPointerId` per Move/Look/Jump), CANCEL-complete JNI zero flush, empty-set TIMEOUT/LAG, and **stale-sample age-out while owners stay live** (identical MOVE + climbing `jniLag` no longer republishes a frozen full-deflection vector). Legacy touch and Legacy pad keep their existing backends.
+## Iso Sandbox (Iso I)
+
+Play still starts in Hall. To open the isometric sandbox:
+
+1. Tap **Menu** (top-left).
+2. Tap **Iso Sandbox**.
+3. Drag one finger to pan the ground-plane look-at. Pinch to zoom. Hardware `+` / `-` also zoom (clamped).
+4. Tap **Menu → Hall** to return to Hall mode.
+
+Iso Sandbox shows a 32×32 true-isometric orthographic ground grid and an origin marker. There is no character, combat, split viewport, or twin-stick HUD in this mode (legacy/new pads are hidden while it is active). Console: `open IsoSandbox` / `open Hall`.
+
+Hall controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router with exclusive pointer-focus ownership (one `ownerPointerId` per Move/Look/Jump), CANCEL-complete JNI zero flush, empty-set TIMEOUT/LAG, and **stale-sample age-out while owners stay live** (identical MOVE + climbing `jniLag` no longer republishes a frozen full-deflection vector). Legacy touch and Legacy pad keep their existing backends.
 
 ## Debug overlay and sticky repro dump
 
@@ -49,4 +60,4 @@ adb install app/build/outputs/apk/foss/debug/app-foss-debug.apk
 
 Play start creates a `GameInstance` (owns World, Asset Registry, Console, TimerManager, EventDispatcher, AudioManager, WidgetViewport, CollisionWorld, InputSubsystem, SaveGameSystem), `init()`s it, then `openLevel("Hall")` from `levels/Hall.json` which installs `HallGameMode`: a `PlayerPawn` (Java handle for the native avatar) and a ticking `HallBeacon` that resolves `/Game/Textures/HallBeacon`. Both carry a `TagComponent`, a `CollisionComponent` box, and a `GameplayTagContainer` (`Character.Player` / `World.Landmark.Beacon`). HallGameMode also sets a 0.25s delayed-start timer, binds actor-spawn / level-unload events, adds a sample `HallTitle` text widget (`HALL`) to the viewport, and binds Jump / Move / Look on the local PlayerController. Save slots live under `filesDir/SaveGames`. `HallAmbience` is registered as an `AUDIO` asset; the AudioManager does not auto-play it. `DefaultMapping` is the Enhanced Input–lite map (`input/DefaultMapping.json`) and a DataAsset. `HallBlade` is the sample `WeaponDataAsset` at `/Game/Data/HallBlade` (`Item.Weapon.Melee`). The top-center `SCENE Hall mode=HallGameMode actors=… comps=… assets=… timers=… events=… saves=… audio=… widgets=… overlaps=… actions=…` line is the GameInstance/GameMode/TimerManager/Event/SaveGame/Audio/Widget/Collision/Input/Scene layer; it is not a stick-lockup change.
 
-fossDebug builds show a `~` button on the play HUD (and Menu → Debug → Console). Type `help`, `actors`, `assets`, `settimer 1 once hello`, `timers`, `events`, `SaveGame Slot0`, `LoadGame Slot0`, `PlaySound HallAmbience`, `audio`, `StopSound HallAmbience`, `CreateWidget Text Hint Hello`, `AddToViewport Hint`, `widgets`, `ListOverlaps`, `input`, `load Hall`, `unload Hall`, or `open Hall`. fossRelease omits the console overlay (debug/release source-set gate).
+fossDebug builds show a `~` button on the play HUD (and Menu → Debug → Console). Type `help`, `actors`, `assets`, `settimer 1 once hello`, `timers`, `events`, `SaveGame Slot0`, `LoadGame Slot0`, `PlaySound HallAmbience`, `audio`, `StopSound HallAmbience`, `CreateWidget Text Hint Hello`, `AddToViewport Hint`, `widgets`, `ListOverlaps`, `input`, `load Hall`, `unload Hall`, `open Hall`, or `open IsoSandbox`. fossRelease omits the console overlay (debug/release source-set gate).

@@ -38,6 +38,8 @@ import com.elitesavior.vasthall.engine.HallBeaconActor;
 import com.elitesavior.vasthall.engine.InputKeys;
 import com.elitesavior.vasthall.engine.Level;
 import com.elitesavior.vasthall.engine.World;
+import com.elitesavior.vasthall.iso.IsoGridView;
+import com.elitesavior.vasthall.iso.IsoSandboxGameMode;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -77,9 +79,11 @@ public final class VastHallActivity extends Activity implements
     private PlayInputMachine playInput;
     private FlatPadRouter flatPad;
     private FlatPadOverlay flatOverlay;
+    private IsoGridView isoGrid;
     private ControlSchemeGate schemeGate;
     private boolean dual = true;
     private boolean menuOpen;
+    private boolean isoPresentationActive;
     private boolean watchdogRunning;
     private HudAxes hudAxes;
     private DebugHub debugHub;
@@ -309,6 +313,12 @@ public final class VastHallActivity extends Activity implements
         flatOverlay.setProbe(this);
         flatOverlay.setJumpChrome(dp(72), dp(186), dp(48), getString(R.string.jump));
         root.addView(flatOverlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+
+        isoGrid = new IsoGridView(this);
+        isoGrid.setVisibility(View.GONE);
+        root.addView(isoGrid, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
 
@@ -636,6 +646,8 @@ public final class VastHallActivity extends Activity implements
         panel.setVisibility(View.GONE);
         panel.addView(title(getString(R.string.menu)));
         panel.addView(menuAction(getString(R.string.resume), this::closeOverlays));
+        panel.addView(menuAction(getString(R.string.iso_sandbox), this::openIsoSandbox));
+        panel.addView(menuAction(getString(R.string.hall_mode), this::openHallMode));
         panel.addView(menuAction(getString(R.string.settings), this::openSettings));
         panel.addView(menuAction(getString(R.string.debug), this::openDebug));
         return panel;
@@ -814,6 +826,9 @@ public final class VastHallActivity extends Activity implements
         if (flatOverlay != null) {
             flatOverlay.setPlayVisible(scheme == ControlScheme.NEW_PAD);
         }
+        if (isoModeActive()) {
+            hideHallPads();
+        }
         if (notifyJump && hudAxes != null) {
             hudAxes.setJump(false);
         }
@@ -897,7 +912,7 @@ public final class VastHallActivity extends Activity implements
         settingsPanel.setVisibility(View.GONE);
         debugPanel.setVisibility(View.GONE);
         hideConsolePanel();
-        nativeSetUiPaused(false);
+        nativeSetUiPaused(isoModeActive());
         debugHub.setPaused(false);
         if (hudAxes != null) {
             hudAxes.setJump(false);
@@ -926,12 +941,95 @@ public final class VastHallActivity extends Activity implements
             widgetOverlay.bind(world.viewport());
         }
         lastWorldTickNs = 0L;
+        syncIsoPresentation();
+    }
+
+    private boolean isoModeActive() {
+        return game != null && game.gameMode() instanceof IsoSandboxGameMode;
+    }
+
+    private void openIsoSandbox() {
+        openNamedLevel("IsoSandbox");
+    }
+
+    private void openHallMode() {
+        openNamedLevel("Hall");
+    }
+
+    private void openNamedLevel(String name) {
+        if (game == null) {
+            return;
+        }
+        game.openLevel(name);
+        world = game.world();
+        console = game.console();
+        if (widgetOverlay != null) {
+            widgetOverlay.bind(world.viewport());
+        }
+        lastWorldTickNs = 0L;
+        syncIsoPresentation();
+        closeOverlays();
+        updateEngineHud();
+    }
+
+    private void syncIsoPresentation() {
+        boolean iso = isoModeActive();
+        if (iso == isoPresentationActive) {
+            if (iso) {
+                bindIsoOverlay();
+            }
+            return;
+        }
+        isoPresentationActive = iso;
+        if (iso) {
+            enterIsoPresentation();
+        } else {
+            exitIsoPresentation();
+        }
+    }
+
+    private void bindIsoOverlay() {
+        if (isoGrid == null || !(game.gameMode() instanceof IsoSandboxGameMode)) {
+            return;
+        }
+        IsoSandboxGameMode mode = (IsoSandboxGameMode) game.gameMode();
+        isoGrid.bind(mode.camera(), mode.grid(), mode.gestures());
+        isoGrid.setVisibility(View.VISIBLE);
+    }
+
+    private void enterIsoPresentation() {
+        bindIsoOverlay();
+        zeroAllControls("ISO_MODE");
+        hideHallPads();
+    }
+
+    private void hideHallPads() {
+        if (playHud != null) {
+            playHud.setPlayVisible(false);
+        }
+        if (jump != null) {
+            jump.setVisibility(View.GONE);
+        }
+        if (flatOverlay != null) {
+            flatOverlay.setPlayVisible(false);
+        }
+    }
+
+    private void exitIsoPresentation() {
+        if (isoGrid != null) {
+            isoGrid.bind(null, null, null);
+            isoGrid.setVisibility(View.GONE);
+        }
+        if (schemeGate != null) {
+            applyScheme(schemeGate.current(), false);
+        }
     }
 
     private void tickWorld(long frameTimeNanos) {
         if (world == null) {
             return;
         }
+        syncIsoPresentation();
         if (!menuOpen) {
             float dt;
             if (lastWorldTickNs == 0L) {
@@ -1283,6 +1381,31 @@ public final class VastHallActivity extends Activity implements
     }
 
     private boolean handleGameKey(int keyCode, KeyEvent event) {
+        if (isoModeActive() && isoGrid != null && isoGrid.camera() != null) {
+            IsoSandboxGameMode mode = (IsoSandboxGameMode) game.gameMode();
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                if (keyCode == KeyEvent.KEYCODE_PLUS
+                        || keyCode == KeyEvent.KEYCODE_EQUALS
+                        || keyCode == KeyEvent.KEYCODE_NUMPAD_ADD) {
+                    mode.gestures().zoomIn();
+                    isoGrid.invalidate();
+                    return true;
+                }
+                if (keyCode == KeyEvent.KEYCODE_MINUS
+                        || keyCode == KeyEvent.KEYCODE_NUMPAD_SUBTRACT) {
+                    mode.gestures().zoomOut();
+                    isoGrid.invalidate();
+                    return true;
+                }
+            }
+            if (keyCode == KeyEvent.KEYCODE_PLUS
+                    || keyCode == KeyEvent.KEYCODE_EQUALS
+                    || keyCode == KeyEvent.KEYCODE_NUMPAD_ADD
+                    || keyCode == KeyEvent.KEYCODE_MINUS
+                    || keyCode == KeyEvent.KEYCODE_NUMPAD_SUBTRACT) {
+                return true;
+            }
+        }
         if (event.getRepeatCount() > 0) {
             return true;
         }

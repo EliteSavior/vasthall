@@ -9,7 +9,7 @@ Native hall rendering and locomotion still live in `libvasthall.so`. This Java l
 | Vast Hall | Unreal analog | Role |
 | --- | --- | --- |
 | `GameInstance` | `UGameInstance` | Owns World, AssetRegistry, Console, TimerManager, EventDispatcher, AudioManager, WidgetViewport, CollisionWorld, InputSubsystem, SaveGameSystem across travel |
-| `GameMode` / `HallGameMode` | `AGameMode` | Per-level rules + default pawn hook + delayed-start timer + event binds + sample HUD widget + Jump/Move/Look binds |
+| `GameMode` / `HallGameMode` / `IsoSandboxGameMode` | `AGameMode` | Per-level rules. Hall: default pawn + delayed-start + HUD + Jump/Move/Look. Iso Sandbox (Iso I): orthographic isometric grid camera, no pawn |
 | `TimerManager` / `TimerHandle` | `FTimerManager` / `FTimerHandle` | SetTimer by delay, loop, clear, pause/unpause |
 | `EventDispatcher` / `MulticastDelegate` / `DelegateHandle` | Event Dispatcher / `FMulticastDelegate` / `FDelegateHandle` | Typed bind / unbind / broadcast |
 | `EventType` | declared multicast / gameplay-message tag | `LevelLoaded`, `ActorSpawned`, … or `EventType.of(name, payload)` |
@@ -146,7 +146,7 @@ world.registerLevel(LevelDefinition.named("Hall")
                 .at(0, 1.5f, 4).tickEnabled(true)));
 ```
 
-Play start calls `GameInstance.withDemoAssets()`, `init()`, then `openLevel("Hall")`.
+Play start calls `GameInstance.withDemoAssets()`, `init()`, then `openLevel("Hall")`. Menu **Iso Sandbox** (or console `open IsoSandbox`) travels to `IsoSandboxGameMode` in `com.elitesavior.vasthall.iso`: no pawn, a 32×32 orthographic isometric ground grid, pan/zoom overlay. Menu **Hall** returns. Iso II+ (character, select-command, dual viewport) is out of scope.
 
 ## Write a GameMode
 
@@ -913,7 +913,7 @@ On play start the activity creates a `GameInstance`, `init()`s it, and `openLeve
 - `PlayerPawn` at the origin (logical stand-in for the native avatar; `TagComponent` `pawn` + box `CollisionComponent` + `Character.Player`)
 - `HallBeacon` at `(0, 1.5, 4)` with tick on (`TagComponent` `beacon` + box `CollisionComponent` + `World.Landmark.Beacon`; texture from `/Game/Textures/HallBeacon`)
 
-A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=6 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0 actions=3  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). `actions=3` is Jump / Move / Look on the default Input Mapping Context. `assets=6` is Hall + mesh/texture/audio stubs + DefaultMapping + HallBlade. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps` / `input`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
+A top-center HUD line shows `SCENE Hall mode=HallGameMode actors=2 comps=4 assets=7 timers=1 events=8 saves=0 audio=0 widgets=1 overlaps=0 actions=3  HallBeacon y=… yaw=…`. `timers=1` is the HallGameMode delayed-start hook; after 0.25s of play it becomes `timers=0`. `events=8` is the console's six engine-hook binds plus HallGameMode's two. `saves=0` is the number of `.sav` slots in `filesDir/SaveGames`. `audio=0` is the number of playing AudioManager voices (Hall ambience is registered, not auto-played). `widgets=1` is the HallGameMode `HallTitle` text widget on the viewport (the amber `HALL` label under the SCENE line). `overlaps=0` is the CollisionWorld pair count (pawn and beacon boxes do not touch). `actions=3` is Jump / Move / Look on the default Input Mapping Context. `assets=7` is Hall + IsoSandbox + mesh/texture/audio stubs + DefaultMapping + HallBlade. Y and yaw change every frame while you are in the hall (not in Menu). fossDebug also shows a `~` button; open it (or Menu → Debug → Console) and run `actors` / `assets` / `settimer 1 once hello` / `timers` / `events` / `SaveGame Slot0` / `LoadGame Slot0` / `PlaySound HallAmbience` / `audio` / `CreateWidget Text Hint Hello` / `AddToViewport Hint` / `widgets` / `ListOverlaps` / `input`. **Menu → Debug → Copy dump** includes the same list under `[ENGINE]`:
 
 ```
 game.instance=1
@@ -929,8 +929,9 @@ world.widgets=1
 world.overlaps=0 debugDraw=0
 world.actions=3
 world.contexts=1
-world.assets=6
+world.assets=7
 asset id=Hall path=levels/Hall.json kind=LEVEL
+asset id=IsoSandbox path=levels/IsoSandbox.json kind=LEVEL
 asset id=HallMesh path=/Game/Meshes/Hall kind=MESH
 asset id=HallBeaconTexture path=/Game/Textures/HallBeacon kind=TEXTURE
 asset id=HallAmbience path=/Game/Audio/HallAmbience kind=AUDIO

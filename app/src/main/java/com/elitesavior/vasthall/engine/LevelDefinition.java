@@ -16,6 +16,7 @@ import java.util.List;
  */
 public final class LevelDefinition {
     public static final String HALL_RESOURCE = "levels/Hall.json";
+    public static final String ISO_SANDBOX_RESOURCE = "levels/IsoSandbox.json";
 
     private final String name;
     private String gameModeClassName;
@@ -35,6 +36,11 @@ public final class LevelDefinition {
     /** Built-in demo hall. Same content as {@code levels/Hall.json}. */
     public static LevelDefinition hall() {
         return fromResource(HALL_RESOURCE);
+    }
+
+    /** Iso I sandbox map. Same content as {@code levels/IsoSandbox.json}. */
+    public static LevelDefinition isoSandbox() {
+        return fromResource(ISO_SANDBOX_RESOURCE);
     }
 
     public static LevelDefinition fromResource(String path) {

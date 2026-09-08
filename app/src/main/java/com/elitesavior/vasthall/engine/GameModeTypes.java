@@ -1,5 +1,7 @@
 package com.elitesavior.vasthall.engine;
 
+import com.elitesavior.vasthall.iso.IsoSandboxGameMode;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,6 +16,7 @@ public final class GameModeTypes {
     static {
         register("GameMode", GameMode.class);
         register("HallGameMode", HallGameMode.class);
+        register("IsoSandboxGameMode", IsoSandboxGameMode.class);
     }
 
     private GameModeTypes() {

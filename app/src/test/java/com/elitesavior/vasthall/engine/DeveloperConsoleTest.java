@@ -104,8 +104,9 @@ public final class DeveloperConsoleTest {
     @Test
     public void assetsListsRegistry() {
         String out = console.exec("assets");
-        assertTrue(out.contains("assets=6"));
+        assertTrue(out.contains("assets=7"));
         assertTrue(out.contains("id=Hall"));
+        assertTrue(out.contains("id=IsoSandbox"));
         assertTrue(out.contains("path=levels/Hall.json"));
         assertTrue(out.contains("kind=LEVEL"));
         assertTrue(out.contains("id=HallMesh"));
@@ -166,7 +167,7 @@ public final class DeveloperConsoleTest {
         String out = console.exec("stat");
         assertTrue(out.contains("actors=2"));
         assertTrue(out.contains("levels=1"));
-        assertTrue(out.contains("assets=6"));
+        assertTrue(out.contains("assets=7"));
         assertTrue(out.contains("frame=0"));
         assertTrue(out.contains("mode=-"));
         assertTrue(out.contains("timers=0"));
