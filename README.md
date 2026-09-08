@@ -5,7 +5,7 @@ FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
 - Tag: `v0.35-hall`
 - Source version: `0.35.0` (debug HUD + MOTION_CORR flight recorder on the v0.34 New pad tip; no stick-ownership change; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (504494 bytes, md5 `6124f7635edc886ef4c719502c8f2710`)
+- File: `VastHall-v0-foss.apk` (504942 bytes, md5 `aedc258f6a416631acaeb330c2b7b48c`)
 
 ## Download
 

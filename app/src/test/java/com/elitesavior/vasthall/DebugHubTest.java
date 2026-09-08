@@ -206,6 +206,7 @@ public final class DebugHubTest {
         assertTrue(dump.contains("[INPUT_LOG]"));
         assertTrue(dump.contains("[MOTION_CORR]"));
         assertTrue(dump.contains("pawnSrc=consumed_integrate"));
+        assertTrue(dump.contains("lookRateUnit=rad_s"));
         assertTrue(dump.contains("cmdMoveHeading="));
         assertTrue(dump.contains("actMoveHeading="));
         assertTrue(dump.contains("headingErrDeg="));

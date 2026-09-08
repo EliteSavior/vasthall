@@ -363,6 +363,9 @@ final class DebugHub {
         sample.dtSec = dt;
         sample.flags = MotionCorr.flags(sample);
         MotionCorr.fillHeadings(sample);
+        float[] cmdLook = lookDelta(frame.rightX, frame.rightY, dt);
+        sample.cmdLookRate = (Math.abs(cmdLook[0]) + Math.abs(cmdLook[1])) / dt;
+        sample.actLookRate = (Math.abs(dYaw) + Math.abs(dPitch)) / dt;
 
         motionRing.push(sample);
         if (lastSparkMs < 0L || now - lastSparkMs >= 50L) {
@@ -375,7 +378,8 @@ final class DebugHub {
         if (latchWatch.consumeStamp()) {
             motionRing.freeze();
             motionLockups.add(MotionCorr.lockupLine(
-                    sample.tMs, latchWatch.why(), sample.conMoveX, sample.conMoveY));
+                    sample.tMs, latchWatch.why(), sample.whoZeroed,
+                    sample.conMoveX, sample.conMoveY));
         }
         lastMotion = sample;
         hudSnapshot = HudSnapshot.from(sample, sparkInput.snapshot(), sparkVel.snapshot(),
@@ -791,6 +795,7 @@ final class DebugHub {
 
     private void appendMotionCorr(StringBuilder out) {
         out.append("pawnSrc=consumed_integrate\n");
+        out.append("lookRateUnit=rad_s\n");
         if (lastMotion != null) {
             out.append("flags=").append(MotionCorr.flagNames(lastMotion.flags)).append('\n');
             out.append("cmdMoveHeading=").append(MotionCorr.f(lastMotion.cmdMoveHeading)).append('\n');
@@ -889,8 +894,8 @@ final class DebugHub {
                     sample.conMoveY,
                     sample.rightX,
                     sample.rightY,
-                    sample.dYaw,
-                    sample.dPitch,
+                    sample.conLookX,
+                    sample.conLookY,
                     sparkIn,
                     sparkV,
                     sparkL,
@@ -921,7 +926,9 @@ final class DebugHub {
                     .append(" dYaw=").append(fmt(sample.dYaw))
                     .append(" dPit=").append(fmt(sample.dPitch))
                     .append(" loc=").append(fmt(sample.pawnX)).append(',')
-                    .append(fmt(sample.pawnZ)).append('\n');
+                    .append(fmt(sample.pawnZ))
+                    .append(" src=con")
+                    .append('\n');
             out.append("yaw=").append(fmt(sample.yaw))
                     .append(" pit=").append(fmt(sample.pitch))
                     .append(" cmdH=").append(MotionCorr.f(sample.cmdMoveHeading))

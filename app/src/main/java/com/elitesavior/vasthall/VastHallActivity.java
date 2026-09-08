@@ -123,9 +123,11 @@ public final class VastHallActivity extends Activity implements
                     lookY = rightZone == null ? 0.0f : rightZone.axisY();
                 }
                 debugHub.tickFrame(lookX, lookY);
-                debugHub.tickMotion(collectMotionFrame());
-                if (motionOverlay != null && debugHub.on()) {
-                    motionOverlay.setSnapshot(debugHub.hudSnapshot());
+                if (debugHub.on()) {
+                    debugHub.tickMotion(collectMotionFrame());
+                    if (motionOverlay != null) {
+                        motionOverlay.setSnapshot(debugHub.hudSnapshot());
+                    }
                 }
             }
             if (watchdogRunning) {

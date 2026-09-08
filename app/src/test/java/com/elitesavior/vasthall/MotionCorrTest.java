@@ -142,8 +142,8 @@ public final class MotionCorrTest {
             sample.pubMoveX = 0.70f;
             sample.conMoveX = 0.70f;
             sample.velX = 0.70f;
-            sample.sampleAgeMs = 200L;
-            sample.jniLagMs = 90L;
+            sample.sampleAgeMs = 8L;
+            sample.jniLagMs = 200L;
             sample.dtSec = 0.016f;
             sample.flags = MotionCorr.flags(sample);
             watch.onSample(sample, false);
@@ -162,10 +162,57 @@ public final class MotionCorrTest {
 
     @Test
     public void lockupLineUsesMotionWhy() {
-        String line = MotionCorr.lockupLine(1200L, MotionCorr.WHY_MOTION_WITHOUT_INPUT, 0.0f, 0.82f);
+        String line = MotionCorr.lockupLine(
+                1200L, MotionCorr.WHY_MOTION_WITHOUT_INPUT, "TIMEOUT", 0.0f, 0.82f);
         assertTrue(line.contains("why=MOTION_WITHOUT_INPUT"));
+        assertTrue(line.contains("whoZeroed=TIMEOUT"));
         assertTrue(line.contains("t_ms=1200"));
         assertTrue(line.contains("axes=0.0000,0.8200"));
+    }
+
+    @Test
+    public void ownedHeldStillSampleAgeDoesNotLatch() {
+        MotionCorr.LatchWatch watch = new MotionCorr.LatchWatch();
+        for (int i = 0; i < 20; i++) {
+            MotionCorr.Sample sample = base(16L * i);
+            sample.moveOwner = 7;
+            sample.leftX = 0.70f;
+            sample.pubMoveX = 0.70f;
+            sample.conMoveX = 0.70f;
+            sample.velX = 0.70f;
+            sample.sampleAgeMs = 250L;
+            sample.jniLagMs = 4L;
+            sample.dtSec = 0.016f;
+            sample.flags = MotionCorr.flags(sample);
+            watch.onSample(sample, false);
+        }
+        assertTrue(MotionCorr.has(MotionCorr.flags(baseWithHold()), MotionCorr.STALE_SAMPLE));
+        assertFalse(watch.latched());
+    }
+
+    @Test
+    public void frozenCsvDoesNotChangeAfterLaterPushes() {
+        MotionCorr.Ring ring = new MotionCorr.Ring(16);
+        MotionCorr.Sample first = base(10L);
+        first.conMoveX = 0.80f;
+        ring.push(first);
+        ring.freeze();
+        String frozen = ring.frozenCsv();
+        MotionCorr.Sample later = base(20L);
+        later.conMoveX = 0.10f;
+        ring.push(later);
+        assertEquals(frozen, ring.frozenCsv());
+        assertTrue(ring.toCsv().contains("0.1000"));
+        assertFalse(ring.frozenCsv().contains("0.1000"));
+    }
+
+    private static MotionCorr.Sample baseWithHold() {
+        MotionCorr.Sample sample = base(0L);
+        sample.moveOwner = 7;
+        sample.leftX = 0.70f;
+        sample.sampleAgeMs = 250L;
+        sample.jniLagMs = 4L;
+        return sample;
     }
 
     private static MotionCorr.Sample base(long tMs) {

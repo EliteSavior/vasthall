@@ -16,6 +16,7 @@ final class MotionCorr {
     static final long LATCH_HOLD_MS = 200L;
     static final long STALE_AXIS_HOLD_MS = 150L;
     static final int RING_CAP = 300;
+    static final long RING_WINDOW_MS = 5_000L;
     static final int SPARK_CAP = 60;
 
     static final int INPUT_NONZERO_MOTION_ZERO = 1;
@@ -131,9 +132,6 @@ final class MotionCorr {
         sample.cmdMoveHeading = worldHeadingDeg(sample.leftX, sample.leftY, sample.yaw);
         sample.actMoveHeading = worldHeadingDeg(sample.velX, sample.velZ, 0.0f);
         sample.headingErrDeg = headingErrDeg(sample.cmdMoveHeading, sample.actMoveHeading);
-        float dt = sample.dtSec <= 0.0f ? DebugHub.DT_MIN : sample.dtSec;
-        sample.cmdLookRate = mag(sample.rightX, sample.rightY);
-        sample.actLookRate = (Math.abs(sample.dYaw) + Math.abs(sample.dPitch)) / dt;
     }
 
     static String formatCsvLine(Sample sample) {
@@ -178,9 +176,10 @@ final class MotionCorr {
         return out.toString();
     }
 
-    static String lockupLine(long tMs, String why, float axisX, float axisY) {
+    static String lockupLine(long tMs, String why, String whoZeroed, float axisX, float axisY) {
+        String who = whoZeroed == null || whoZeroed.isEmpty() ? "-" : whoZeroed;
         return "t_ms=" + tMs
-                + " whoZeroed=" + nz(why)
+                + " whoZeroed=" + who
                 + " why=" + nz(why)
                 + " zone=motion"
                 + " axes=" + f(axisX) + "," + f(axisY);
@@ -292,6 +291,19 @@ final class MotionCorr {
             if (count < slots.length) {
                 count++;
             }
+            pruneWindow(sample.tMs);
+        }
+
+        private void pruneWindow(long nowMs) {
+            long cutoff = nowMs - RING_WINDOW_MS;
+            while (count > 0) {
+                int oldest = (next - count + slots.length) % slots.length;
+                Sample first = slots[oldest];
+                if (first == null || first.tMs >= cutoff) {
+                    break;
+                }
+                count--;
+            }
         }
 
         int size() {
@@ -317,7 +329,7 @@ final class MotionCorr {
 
         List<Sample> snapshot() {
             List<Sample> out = new ArrayList<>(count);
-            int start = count < slots.length ? 0 : next;
+            int start = (next - count + slots.length) % slots.length;
             for (int i = 0; i < count; i++) {
                 out.add(slots[(start + i) % slots.length]);
             }
@@ -447,7 +459,8 @@ final class MotionCorr {
             }
             boolean motionWithout = has(sample.flags, INPUT_ZERO_MOTION_NONZERO)
                     || (ownersEmpty(sample) && axesMag(sample) > AXIS_EPS);
-            boolean stale = has(sample.flags, STALE_SAMPLE);
+            boolean stale = has(sample.flags, STALE_SAMPLE)
+                    && (sample.jniLagMs >= STALE_MS || ownersEmpty(sample));
             if (motionWithout) {
                 if (motionWithoutInputStart < 0L) {
                     motionWithoutInputStart = sample.tMs;

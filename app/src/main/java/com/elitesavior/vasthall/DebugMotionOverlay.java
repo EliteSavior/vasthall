@@ -110,7 +110,7 @@ final class DebugMotionOverlay extends View {
 
         float lookOriginX = left + width - arrowBox;
         drawArrow(canvas, lookOriginX, originY, snap.cmdLookX, -snap.cmdLookY, arrowBox * 0.35f, cmdPaint);
-        drawArrow(canvas, lookOriginX, originY, snap.actLookX * 8.0f, -snap.actLookY * 8.0f,
+        drawArrow(canvas, lookOriginX, originY, snap.actLookX, -snap.actLookY,
                 arrowBox * 0.35f, actPaint);
         canvas.drawText("look", lookOriginX - dp(8), originY + arrowBox * 0.48f, textPaint);
 
