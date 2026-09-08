@@ -5,7 +5,7 @@ FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
 - Tag: `v0.34-hall`
 - Source version: `0.34.0` (New pad focus ownership + CANCEL JNI zero flush + tick sample timeout on the v0.33 Flat router / three control schemes; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (478642 bytes, md5 `1977b71f77b5c85d6e8cbff18c0f8ed7`)
+- File: `VastHall-v0-foss.apk` (479598 bytes, md5 `e2d721ad54e185200f94793a1da7e717`)
 
 ## Download
 
