@@ -3,22 +3,25 @@
 FOSS sideload APK for Vast Hall (`com.elitesavior.vasthall`).
 
 - Flavor: `foss` (no Play / GMS / Firebase, no `INTERNET`)
-- Tag: `v0.32-hall`
-- Source version: `0.32.0` (GameplayTags + DataAssets + Input Action mapping + Collision/overlaps + UMG-lite Widget viewport + AudioManager + SaveGame slots + Gameplay events/delegates + TimerManager on GameInstance/World + GameMode + Scene/Actor/Level/Component/Asset/Console; see [ENGINE.md](ENGINE.md))
-- File: `VastHall-v0-foss.apk` (461570 bytes, md5 `606d930dc0d9a4e8382b6870fd2a132d`)
+- Tag: `v0.33-hall`
+- Source version: `0.33.0` (New pad Flat router + three control schemes on the v0.32 GameplayTags stack; see [ENGINE.md](ENGINE.md))
+- File: `VastHall-v0-foss.apk` (473146 bytes, md5 `30486e1c00fb17f16d27f80a4f496130`)
 
 ## Download
 
-Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.32-hall). This binary is `assembleFoss` from the gameplay-tags / PR #22 tip (engine stages through DataAssets / Tags).
+Get the APK from [Releases](https://github.com/EliteSavior/vasthall/releases/tag/v0.33-hall).
 
-Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.32-hall/VastHall-v0-foss.apk
+Direct: https://github.com/EliteSavior/vasthall/releases/download/v0.33-hall/VastHall-v0-foss.apk
+
+Clean install (signing may differ from older drops):
 
 ```bash
-adb uninstall com.elitesavior.vasthall
-adb install VastHall-v0-foss.apk
+adb uninstall com.elitesavior.vasthall && adb install VastHall-v0-foss.apk
 ```
 
-Signing note: this binary-only drop does not contain the private debug key used through v0.16. Android therefore requires a clean install when replacing v0.16 or older.
+This repo is the public sideload drop.
+
+Controls (Menu → Settings): **Legacy touch**, **Legacy pad**, and **New pad**. New pad is the Flat router; Legacy touch and Legacy pad keep their existing backends.
 
 ## Build this source
 
