@@ -137,6 +137,8 @@ final class HudAxes {
         }
         running = true;
         lastNativeConsumeNs = System.nanoTime();
+        lastChangeNs = System.nanoTime();
+        lastConsumeDurationMs = 0L;
         Thread thread = new Thread(this::loop, "hall-axis-pump");
         thread.setDaemon(true);
         pump = thread;
@@ -172,10 +174,6 @@ final class HudAxes {
                     my = 0.0f;
                     lx = 0.0f;
                     ly = 0.0f;
-                    moveX.set(Float.floatToIntBits(0.0f));
-                    moveY.set(Float.floatToIntBits(0.0f));
-                    lookX.set(Float.floatToIntBits(0.0f));
-                    lookY.set(Float.floatToIntBits(0.0f));
                 }
             }
             long consumeStart = System.nanoTime();

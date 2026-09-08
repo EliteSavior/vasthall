@@ -346,6 +346,11 @@ public final class StickViewTest {
         assertEquals(0.30f, axes.publishedLookY(), EPSILON);
         axes.start();
         assertTrue(applied.await(1, TimeUnit.SECONDS));
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(1);
+        while (System.nanoTime() < deadline
+                && Math.abs(axes.consumedMoveX() - 0.40f) > EPSILON) {
+            Thread.sleep(5);
+        }
         assertEquals(0.40f, axes.consumedMoveX(), EPSILON);
         assertEquals(-0.20f, axes.consumedMoveY(), EPSILON);
         assertEquals(0.10f, axes.consumedLookX(), EPSILON);
