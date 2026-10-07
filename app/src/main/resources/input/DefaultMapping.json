@@ -1,0 +1,25 @@
+{
+  "name": "Default",
+  "actions": [
+    { "name": "Jump", "valueType": "DIGITAL" },
+    { "name": "Move", "valueType": "AXIS2D" },
+    { "name": "Look", "valueType": "AXIS2D" }
+  ],
+  "mappings": [
+    { "action": "Jump", "key": "Space" },
+    { "action": "Jump", "key": "Gamepad.FaceButtonBottom" },
+    { "action": "Jump", "key": "Touch.Jump" },
+    { "action": "Move", "key": "W", "axis": "Y", "scale": 1 },
+    { "action": "Move", "key": "S", "axis": "Y", "scale": -1 },
+    { "action": "Move", "key": "A", "axis": "X", "scale": -1 },
+    { "action": "Move", "key": "D", "axis": "X", "scale": 1 },
+    { "action": "Move", "key": "ArrowUp", "axis": "Y", "scale": 1 },
+    { "action": "Move", "key": "ArrowDown", "axis": "Y", "scale": -1 },
+    { "action": "Move", "key": "ArrowLeft", "axis": "X", "scale": -1 },
+    { "action": "Move", "key": "ArrowRight", "axis": "X", "scale": 1 },
+    { "action": "Move", "key": "Touch.Move" },
+    { "action": "Move", "key": "Gamepad.LeftStick" },
+    { "action": "Look", "key": "Touch.Look" },
+    { "action": "Look", "key": "Gamepad.RightStick" }
+  ]
+}

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="vh_bg">#0b0c10</color>
+    <color name="vh_fg">#d4783a</color>
+    <color name="vh_stone">#5a5348</color>
+</resources>

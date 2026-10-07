@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vast Hall</string>
+    <string name="back_to_menu">Back</string>
+    <string name="controls">Controls</string>
+    <string name="dual_joysticks">Legacy pad</string>
+    <string name="jump">Jump</string>
+    <string name="legacy_touch">Legacy touch</string>
+    <string name="legacy_pad">Legacy pad</string>
+    <string name="new_pad">New pad</string>
+    <string name="menu">Menu</string>
+    <string name="resume">Resume</string>
+    <string name="settings">Settings</string>
+    <string name="debug">Debug</string>
+    <string name="debug_master">Debug ON</string>
+    <string name="debug_controls">Controls</string>
+    <string name="debug_camera">Camera</string>
+    <string name="debug_input">Input events</string>
+    <string name="debug_engine">Engine</string>
+    <string name="debug_lifecycle">Lifecycle</string>
+    <string name="copy_dump">Copy dump</string>
+    <string name="share_dump">Share dump</string>
+    <string name="clear_log">Clear log</string>
+    <string name="copied">copied</string>
+    <string name="log_cleared">log cleared</string>
+    <string name="dbg_mark">DBG</string>
+    <string name="console">Console</string>
+    <string name="console_run">Run</string>
+    <string name="console_hint">command (help, actors, assets, load Hall)</string>
+    <string name="console_tilde">~</string>
+    <string name="iso_sandbox">Iso Sandbox</string>
+    <string name="hall_mode">Hall</string>
+</resources>
